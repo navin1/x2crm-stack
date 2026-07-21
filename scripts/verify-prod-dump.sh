@@ -53,7 +53,13 @@ echo "==> Loading the dump (this can take a while for a large database)..."
 # pre-existing orphaned references (e.g. a row pointing at a since-deleted
 # x2_actions row) that a strict reload would reject even though production
 # itself has been running fine with that data for years.
-if ! { echo "SET FOREIGN_KEY_CHECKS=0;"; cat "$DUMP_FILE"; } | docker exec -i "$CONTAINER" mysql -uroot -pverify verify 2>/tmp/verify_dump_load_errors.log; then
+#
+# Uses --init-command instead of piping a prepended SET statement through
+# `cat` — confirmed on a real deployment that the `{ echo ...; cat ...; } |
+# docker exec -i` pipe chain can exit 0 with no visible error while
+# actually loading almost nothing. Redirecting the file directly into
+# mysql's stdin removes that whole pipe chain.
+if ! docker exec -i "$CONTAINER" mysql --init-command="SET FOREIGN_KEY_CHECKS=0" -uroot -pverify verify < "$DUMP_FILE" 2>/tmp/verify_dump_load_errors.log; then
   echo "    FAILED to load cleanly — the dump has a SQL error or was cut off mid-statement."
   echo "    Last error output:"
   tail -20 /tmp/verify_dump_load_errors.log

@@ -52,7 +52,16 @@ echo "==> Restoring production dump into ${DB_NAME}..."
 # pre-existing orphaned references (e.g. a row pointing at a since-deleted
 # x2_actions row) that a strict reload would reject even though production
 # itself has been running fine with that data for years.
-{ echo "SET FOREIGN_KEY_CHECKS=0;"; cat "$DUMP_FILE"; } | docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}"
+#
+# Uses --init-command instead of piping a prepended SET statement through
+# `cat` — confirmed on a real deployment that the `{ echo ...; cat ...; } |
+# docker exec -i` pipe chain can exit 0 with no visible error while
+# actually loading almost nothing (only 9 tables existed afterward, none
+# of them real production tables) — a silent partial failure somewhere in
+# that multi-stage pipe. Redirecting the file directly into mysql's stdin
+# and setting FK checks via a client flag instead removes that whole pipe
+# chain, which is both simpler and avoids whatever was truncating it.
+docker exec -i x2crm_db mysql --init-command="SET FOREIGN_KEY_CHECKS=0" -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < "$DUMP_FILE"
 
 echo "==> Layering this stack's custom schema on top..."
 docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scripts/reconcile-custom-schema.sql
