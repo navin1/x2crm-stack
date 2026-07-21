@@ -340,10 +340,16 @@ step specifically was missed, as opposed to the Security List.
 Still in the SSH session:
 ```bash
 git clone <your-repo-url> x2crm-stack && cd x2crm-stack
-git clone --branch 7.1 --depth 1 https://github.com/X2Engine/X2CRM.git x2crm-app/src
 cp .env.example .env
 nano .env   # fill in DB_ROOT_PASSWORD, DB_PASSWORD, MAILERLITE_API_KEY — same values you'd use anywhere
 ```
+Note there's deliberately no separate `git clone` of upstream X2Engine
+here anymore: once your own repo has ever had customizations committed
+directly into `x2crm-app/src` (custom modules, edited core files), that
+tree in *your* repo is no longer just a copy of stock X2Engine — cloning
+stock X2Engine on top of it would silently overwrite those changes with
+vanilla upstream code. Cloning your own repo is sufficient on its own.
+
 If `docker` commands complain about permissions here, either log out and
 back in once (the group membership from bootstrap.sh needs a fresh login
 to take effect) or prefix commands with `sudo` for this session.
