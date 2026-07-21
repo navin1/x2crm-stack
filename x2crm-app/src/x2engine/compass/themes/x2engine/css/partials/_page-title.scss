@@ -1,0 +1,320 @@
+/***********************************************************************************
+ * X2Engine Open Source Edition is a customer relationship management program developed by
+ * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * 
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License version 3 as published by the
+ * Free Software Foundation with the addition of the following permission added
+ * to Section 15 as permitted in Section 7(a): FOR ANY PART OF THE COVERED WORK
+ * IN WHICH THE COPYRIGHT IS OWNED BY X2ENGINE, X2ENGINE DISCLAIMS THE WARRANTY
+ * OF NON INFRINGEMENT OF THIRD PARTY RIGHTS.
+ * 
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+ * details.
+ * 
+ * You should have received a copy of the GNU Affero General Public License along with
+ * this program; if not, see http://www.gnu.org/licenses or write to the Free
+ * Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA.
+ * 
+ * You can contact X2Engine, Inc. P.O. Box 610121, Redwood City,
+ * California 94061, USA. or at email address contact@x2engine.com.
+ * 
+ * The interactive user interfaces in modified source and object code versions
+ * of this program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU Affero General Public License version 3.
+ * 
+ * In accordance with Section 7(b) of the GNU Affero General Public License version 3,
+ * these Appropriate Legal Notices must retain the display of the "Powered by
+ * X2 Engine" logo. If the display of the logo is not reasonably feasible for
+ * technical reasons, the Appropriate Legal Notices must display the words
+ * "Powered by X2 Engine".
+ **********************************************************************************/
+
+
+
+
+/**
+*  
+* styling page for page-titles. That is, the title bar for most modules.
+* Most of the icons are generated here.
+*
+**/
+
+.page-title.icon {
+    & > .x2-button.icon { 
+        width: 41px; 
+        height: 27px; 
+        box-sizing: border-box;
+    }
+}
+
+.page-title, 
+.section-title {
+    @include border-radius (2px 2px 0 0);
+    background-repeat: no-repeat;
+    background-position: 0 -5px;
+    padding: 0 5px;
+    border-bottom: 1px solid #aaa;
+
+    background: #c0c0c0;
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#c0c0c0', endColorstr='#b0b0b0',GradientType=0 );
+    line-height: 34px;
+    height: 35px;
+
+}
+
+
+table.fc-header {
+    @include border-radius (4px 4px 0 0);
+    background-repeat: no-repeat;
+    background-position: 0 -5px;
+    padding: 0 5px;
+    margin-bottom: 20px;
+    border-bottom: none;
+    border: 1px solid #e0e0e0;
+    background: white;
+
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#c0c0c0', endColorstr='#b0b0b0',GradientType=0 );
+
+    line-height: 34px;
+    height: 35px;
+}
+
+.grid-view div.page-title {
+    border-bottom: 1px solid #e0e0e0;
+    
+    h2 {
+        overflow: visible;
+    }
+}
+
+/* used when elements with page-title class are not at the top of the content box */
+.rounded-top {
+    @include border-radius (2px 2px 0 0);
+}
+
+
+table.fc-header .fc-header-title h2 {
+    display: inline-block;
+    padding-left: 49px;
+    margin-left: 0;
+    background-repeat: no-repeat;
+    background-position: -1px -5px;
+}
+
+.page-title {
+    background: white;
+    border-bottom: none;
+
+    span.icon, &.icon h2:before {
+        font-size: 20px !important;
+    }
+    
+    span.icon {
+        display: inline-block;
+        padding: 0;
+        &.contacts {
+            margin-left: 10px;
+            display: inline-block;
+            &:before {
+                position: relative;
+                top: -6px;
+            }
+        }
+    }
+
+    div.icon {
+        display: inline-block;
+        padding: 0;
+        &.contacts {
+            margin-left: 10px;
+            display: inline-block;
+            &:before {
+                position: relative;
+                top: -6px;
+            }
+        }
+    }
+
+    // This may be able to be merged with .icon h2 below
+    h2 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: auto;
+        padding-right: 14px;
+    }
+
+
+    // Most page titles use this rule
+    &.icon {
+        h2 {
+            display: inline-block;
+            padding-left: 49px;
+            margin-left: 0;
+            background-repeat: no-repeat;
+            background-position: -1px -5px;
+            color: #555555;
+
+            &:before {
+                margin-left: -39px;
+                margin-right: 12px;
+            }
+        }
+
+        // append " h2" to selectors of all items in the icon list
+        $mod-icon-list-fa: $icon-list-fa;
+        @for $i from 1 through length($icon-list-fa) {
+            $item: nth($mod-icon-list-fa, $i);
+            $mod-icon-list-fa: set-nth($mod-icon-list-fa, $i, set-nth($item, 1, nth($item, 1) + ' h2'));
+        }
+        $mod-icon-list-x2: $icon-list-x2;
+        @for $i from 1 through length($icon-list-x2) {
+            $item: nth($mod-icon-list-x2, $i);
+            $mod-icon-list-x2: set-nth($mod-icon-list-x2, $i, set-nth($item, 1, nth($item, 1) + ' h2'));
+        }
+
+        @include generate-icons($mod-icon-list-fa);
+        @include generate-icons($mod-icon-list-x2, 'x2');
+    }
+}
+
+.reports h2 {
+    &:before {
+        font-size: 22px !important;
+        position: relative;
+        top: 2px;
+    }
+    &:after {
+        float: left;
+        width: 0;
+        font-size: 12px !important;
+        position: relative;
+        left: -36px;
+        top: 14px;
+    }
+}
+
+div.page-title.icon.contacts h2 {
+    background-image: url(../images/contacts.png);
+}
+
+.page-title.icon.accounts h2{
+    background-image: url(../../x2engine/images/accounts.png);
+}
+
+.page-title.icon.marketing h2{
+    background-image: url(../images/marketing.png)
+}
+
+.page-title.icon.x2Leads h2{
+    background-image: url(../images/x2Leads.png)
+}
+
+.page-title.icon.opportunities h2{
+    background-image: url(../images/opportunities.png)
+}
+
+.page-title.icon.services h2{
+    background-image: url(../images/services.png);
+}
+
+.page-title.icon.actions h2{
+    background-image: url(../images/actions.png);
+}
+
+
+span.fc-header-title h2{
+    background-image: url(../images/calendar.png);
+}
+
+.page-title.icon.docs h2{
+    background-image: url(../images/docs.png);
+}
+
+.page-title.icon.workflow h2{
+    background-image: url(../images/workflow.png);
+}
+
+.page-title.icon.products h2{
+    background-image: url(../images/products.png);
+}
+
+.page-title.icon.quotes h2{
+    background-image: url(../images/quotes.png);
+}
+
+.page-title.icon.reports h2{
+    background-position: inherit;
+    background-image: url(../images/folder.png);
+}
+
+.page-title.icon.media h2{
+    background-position: inherit;
+    background-image: url(../images/media.png);
+}
+
+.page-title.icon.groups h2{
+    background-image: url(../images/groups.png);
+}
+
+.page-title .inline-edit-button {
+    & .fa {
+        position:relative;
+        top: -1px;
+        margin-right: 5px;
+    }  
+}
+
+td.fc-header-left h2 {
+    padding-left: 45px;
+}
+
+
+.page-title-placeholder {
+    height: 36px;
+    clear: both;
+}
+.page-title-fixed-outer {
+    height: 0;
+    position: fixed;
+    z-index: 500;
+    width: calc(100% - 63px);
+    top: 52px;
+    margin-left: 27px;
+    left: 0;
+    -webkit-transform: translateZ(0);
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    padding-left: 151px;
+}
+
+
+.no-borders .page-title-fixed-outer {
+    padding-right: 36px;
+}
+
+
+.page-title-fixed-inner {
+    height: 0;
+    padding-right: 22%;
+    padding-left: 11px;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+}
+.page-title-fixed-outer {
+    div.page-title {
+        margin-left: 3px;
+        margin-right: 6px;
+        width: auto;
+        border: 1px solid #e0e0e0;
+        
+        @include border-radius (4px 4px 4px 4px);
+    }
+    padding-right: 9px;
+}

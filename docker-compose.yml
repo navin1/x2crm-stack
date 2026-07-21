@@ -1,0 +1,127 @@
+services:
+  db:
+    # mysql:5.7 has no arm64 build (breaks on Apple Silicon Macs and on
+    # ARM-based cloud VMs like AWS Graviton/Oracle Ampere). mysql:8.0
+    # ships for both amd64 and arm64, so the exact same compose file
+    # works everywhere without emulation. The command flag below makes
+    # it accept connections the way X2CRM's PHP 7.4 mysqli/pdo_mysql
+    # drivers expect — MySQL 8's new default auth method otherwise
+    # isn't supported by older PHP database extensions.
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    container_name: x2crm_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - x2crm_net
+
+  x2crm:
+    build:
+      context: ./x2crm-app
+    container_name: x2crm_app
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - x2crm_code:/var/www/html
+    ports:
+      - "8080:80"
+    networks:
+      - x2crm_net
+
+  integration:
+    build:
+      context: ./integration
+    container_name: x2crm_integration
+    restart: unless-stopped
+    depends_on:
+      - x2crm
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - x2crm_net
+
+  wa_hub:
+    build:
+      context: ./wa-hub
+    container_name: x2crm_wahub
+    restart: unless-stopped
+    depends_on:
+      - x2crm
+    env_file:
+      - .env
+    environment:
+      X2CRM_API_URL: ${X2CRM_API_URL}
+      X2CRM_API_USERNAME: ${X2CRM_API_USERNAME}
+      X2CRM_API_KEY: ${X2CRM_API_KEY}
+      WA_ADMIN_TOKEN: ${WA_ADMIN_TOKEN:-changeme}
+      WA_ADMIN_USERS: ${WA_ADMIN_USERS:-admin:changeme}
+    volumes:
+      # Persists the paired WhatsApp session (Baileys creds) across
+      # container rebuilds/restarts — without this, every `--build` wipes
+      # the pairing and forces a fresh QR scan.
+      - wa_session:/app/auth_info_baileys
+    # No `ports:` mapping here deliberately — wa-hub has unauthenticated
+    # routes (/messages, /webhooks/wa) and was previously reachable directly
+    # from the internet on 3001, bypassing Caddy's TLS entirely. Every real
+    # caller reaches it over the internal x2crm_net instead: X2CRM's PHP
+    # (WhatsappGroupsController) calls http://wa_hub:3001 server-side, and
+    # the one endpoint public browsers need (GET /form-status/:id, for the
+    # anonymous lead-form pages) is now reverse-proxied through Caddy.
+    networks:
+      - x2crm_net
+
+  caddy:
+    build:
+      context: ./caddy
+    container_name: x2crm_caddy
+    restart: unless-stopped
+    depends_on:
+      - x2crm
+      - integration
+    environment:
+      # Explicit "http://" prefix tells Caddy NOT to attempt automatic
+      # HTTPS for this site — without it, Caddy tries to serve even
+      # "localhost" over HTTPS using its own self-signed CA, which
+      # browsers don't trust and looks like the page failing to load.
+      # On the cloud, CRM_DOMAIN gets set to a bare domain (no http://)
+      # specifically so automatic HTTPS via Let's Encrypt DOES kick in.
+      CRM_DOMAIN: ${CRM_DOMAIN:-http://localhost}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - x2crm_net
+
+volumes:
+  db_data:
+  x2crm_code:
+  caddy_data:
+  caddy_config:
+  wa_session:
+
+networks:
+  x2crm_net:
+    driver: bridge

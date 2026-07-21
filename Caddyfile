@@ -1,0 +1,71 @@
+# Caddy auto-provisions and renews Let's Encrypt certs for whatever
+# domain you point at this server's IP — no manual certbot/nginx config
+# needed, and it works identically on every cloud.
+#
+# CRM_DOMAIN is set via docker-compose.yml (from .env):
+#   Local dev:  http://localhost   → explicit "http://" disables Caddy's
+#               automatic HTTPS, so it serves plain HTTP as expected.
+#   Production: crm.yourcompany.com (NO "http://" prefix) → this is what
+#               triggers real, trusted Let's Encrypt HTTPS.
+
+{$CRM_DOMAIN:http://localhost}, http://127.0.0.1 {
+	# Integration middleware — only these specific paths are exposed
+	# publicly (MailerLite's webhook needs to reach this from the internet;
+	# everything else on the middleware stays internal). Every one of these
+	# routes also requires integration/server.js's own shared-secret check
+	# (?secret=...): without it, and without this rate limit, they were
+	# public with zero auth — including /trigger/mailerlite-email, which
+	# triggers a real outbound email to whatever address a caller supplies.
+	@integration path /webhooks/* /sync/* /trigger/* /health
+	handle @integration {
+		rate_limit {
+			zone integration_burst {
+				key {remote_host}
+				events 60
+				window 1m
+			}
+		}
+		reverse_proxy integration:3000
+	}
+
+	# wa-hub's WhatsApp connection/session status check, used by the
+	# anonymous, unauthenticated lead-capture pages (leadform*.html) to know
+	# whether a form is still accepting submissions. This is the only
+	# wa-hub route a public browser needs directly — everything else
+	# (group management, QR pairing, message history) is proxied
+	# server-side by X2CRM's PHP over the internal docker network, so
+	# wa-hub itself has no published host port.
+	@waformstatus path /form-status/*
+	handle @waformstatus {
+		reverse_proxy wa_hub:3001
+	}
+
+	# Public lead-capture forms (leadform*.html, and the X2CRM endpoint they
+	# post to) are reachable by anyone on the internet — no login, no
+	# CAPTCHA. Rate-limit by IP here so a script can't spam fake
+	# Contacts/Leads into the CRM, and — worse — spam a salesperson's
+	# WhatsApp via the per-form notification poll. Two zones: a tight burst
+	# limit for scripted rapid-fire submission, and a longer-window cap for
+	# slower, sustained abuse from the same IP.
+	@leadforms path /leadform*.html /index.php/contacts/contacts/weblead*
+	handle @leadforms {
+		rate_limit {
+			zone leadform_burst {
+				key {remote_host}
+				events 5
+				window 1m
+			}
+			zone leadform_sustained {
+				key {remote_host}
+				events 30
+				window 1h
+			}
+		}
+		reverse_proxy x2crm:80
+	}
+
+	# X2CRM app — everything else
+	handle {
+		reverse_proxy x2crm:80
+	}
+}

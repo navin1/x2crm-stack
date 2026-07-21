@@ -1,0 +1,1208 @@
+/*!*********************************************************************************
+ * X2Engine Open Source Edition is a customer relationship management program developed by
+ * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * 
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License version 3 as published by the
+ * Free Software Foundation with the addition of the following permission added
+ * to Section 15 as permitted in Section 7(a): FOR ANY PART OF THE COVERED WORK
+ * IN WHICH THE COPYRIGHT IS OWNED BY X2ENGINE, X2ENGINE DISCLAIMS THE WARRANTY
+ * OF NON INFRINGEMENT OF THIRD PARTY RIGHTS.
+ * 
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+ * details.
+ * 
+ * You should have received a copy of the GNU Affero General Public License along with
+ * this program; if not, see http://www.gnu.org/licenses or write to the Free
+ * Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA.
+ * 
+ * You can contact X2Engine, Inc. P.O. Box 610121, Redwood City,
+ * California 94061, USA. or at email address contact@x2engine.com.
+ * 
+ * The interactive user interfaces in modified source and object code versions
+ * of this program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU Affero General Public License version 3.
+ * 
+ * In accordance with Section 7(b) of the GNU Affero General Public License version 3,
+ * these Appropriate Legal Notices must retain the display of the "Powered by
+ * X2 Engine" logo. If the display of the logo is not reasonably feasible for
+ * technical reasons, the Appropriate Legal Notices must display the words
+ * "Powered by X2 Engine".
+ **********************************************************************************/
+
+
+
+
+
+
+$edgeColor: #CCCCCC;
+
+#x2flow-start {
+    padding: 19px;
+}
+
+.x2flow-main {
+    border: 1px solid #c5c5c5;
+}
+
+.temp {
+    border: 3px solid red !important;
+}
+
+.dz {
+    position: absolute;
+    z-index: 1;
+    background: none;
+    border: 1px solid rgba(255, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.page-title {
+    b {
+        color: #fff;
+    }
+    input {
+        margin-top: 5px;
+        line-height: 24px;
+        border: none;
+        padding: 05;
+    }
+}
+
+/* side box with a menu of available flow nodes */
+
+#flow-actions .portlet-content {
+    padding: 0;
+}
+
+#delete-actions {
+    width:99%;
+    height:40px;
+    position:relative;
+}
+
+.form {
+    &.x2flow-trash {
+        height: 40px;
+        width: 99%;
+        position:relative;
+        border: 2px solid #eee;
+        padding: 0;
+        background: url(../images/x2flow/trashcan.png) center 6px no-repeat white;
+        &.x2flow-active {
+            border: 2px solid #cc0000;
+            background-position: center -30px;
+        }
+        &.x2flow-hover {
+            border: 2px solid #ff4d4d;
+            background-position: center -66px;
+        }
+    }
+    &.x2flow-main {
+        padding: 20px 19px 54px 19px;
+        position: relative;
+    }
+}
+
+/* box where the actual flow is created */
+
+/* basic flow branch (vertical line of nodes), is a drop target */
+
+.x2flow-branch {
+    font-size: 0;
+}
+
+/* .x2flow-branch.x2flow-active {background:#acf;} */
+
+.form.x2flow-main > .x2flow-branch {
+    display: inline-block;
+}
+
+/* basic flow unit, can be dragged */
+
+.x2flow-node {
+    display: inline-block;
+    vertical-align: middle;
+    &.selected {
+        border-color: #ffbf00;
+        &:hover {
+            border-color: #ffd460;
+        }
+    }
+}
+
+/* .x2flow-node:last-child {margin-bottom:0;} */
+
+.x2flow-action, .x2flow-empty, .x2flow-trigger {
+    height: 32px;
+    width: 40px;
+    border: 2px solid #999;
+    margin-right: 35px;
+    -moz-border-radius: 5px;
+    -o-border-radius: 5px;
+    -webkit-border-radius: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#x2flow-stage {
+    border: 0px solid #C2C2C2;
+    border-width: 1px 0px 1px 0px;
+    overflow-x: auto;
+    background: url(../images/x2flow/grid.gif) left center;
+}
+
+#x2flow-main {
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 0;
+    background-color: transparent !important;
+    border-color: transparent !important;
+    .x2flow-action::after {
+        content: "";
+        width: 24px;
+        height: 30px;
+        display: block;
+        position: relative;
+        left: 48px;
+        top: -47px;
+        background: url(../images/x2flow/arrow_2.png) no-repeat center center transparent;
+    }
+}
+
+#trigger {
+    &:after {
+        content: "";
+        width: 24px;
+        height: 30px;
+        display: block;
+        position: relative;
+        left: 48px;
+        top: -47px;
+        background: url(../images/x2flow/arrow_2.png) no-repeat center center transparent;
+    }
+    &.no-label:after {
+        top: 3px;
+    }
+}
+
+#x2flow-main {
+    .x2flow-action {
+        &.no-label:after, &.x2flow-placeholder:after {
+            top: 3px;
+        }
+    }
+    div.x2flow-placeholder div.x2flow-action:after {
+        top: 3px;
+    }
+    .x2flow-node:last-child:after, .x2flow-placeholder:before {
+        display: none;
+    }
+}
+
+.X2FlowSwitch, .X2FlowSplitter {
+    &:before, &:after {
+        display: none;
+    }
+}
+
+.x2flow-action, .x2flow-trigger {
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+.x2flow-action {
+    background-color: #deeef5;
+}
+
+.x2flow-node span {
+    display: none;
+}
+
+/* .x2flow-action:hover {background-color:#999;} */
+
+.x2flow-trigger {
+    background-color: #2e5e9c;
+    &:hover {
+        background-color: #1862bd;
+    }
+}
+
+/* placeholder elements with striped backgrounds */
+
+.x2flow-empty {
+    border: 2px solid #ccc;
+    cursor: default;
+    border-color: #ccc;
+    background: url(../images/x2flow/hatches.gif);
+    &:hover {
+        border: 2px solid #ccc;
+        cursor: default;
+        border-color: #ccc;
+        background: url(../images/x2flow/hatches.gif);
+    }
+    &:before {
+        display: none;
+    }
+}
+
+/* light up when the parent branch is an active drop target */
+
+.x2flow-branch {
+    &.x2flow-active > .x2flow-node.x2flow-empty {
+        border-color: #83bed0;
+        background: url(../images/x2flow/hatches-active.gif);
+    }
+    &.x2flow-hover > .x2flow-node.x2flow-empty {
+        border-color: #66f0ff;
+        background: url(../images/x2flow/hatches-active-hover.gif);
+    }
+}
+
+.X2FlowSwitch, .X2FlowSplitter {
+    position: relative;
+    /* background:#fff; */
+}
+
+.actions {
+    .X2FlowSwitch,
+    .X2FlowSplitter {
+        .icon {
+            display: none;
+            .icon-inner::before {
+                visibility: hidden;
+            }
+        }
+    }
+}
+
+#all {
+    .x2flow-placeholder {
+        display: none;
+    }
+}
+
+#actions-bank {
+    overflow-y: visible;
+    width:93%;
+    display:none;
+    -moz-box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px 0 rgba(0, 0, 0, 0.2);
+    -webkit-box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px 0 rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px 0 rgba(0, 0, 0, 0.2);
+    border: 1px solid #C2C2C2;
+    background-color: #fff;
+    padding: 10px;
+    margin: 20px 19px 20px 19px;
+}
+
+.shortcodes {
+    padding: 0px 5px 0px 5px;
+    position: absolute;
+    background: white;
+    border: 1px solid #d3d3d3;
+    border-radius: 5px;
+    max-height: 100px;
+    min-width: 200px;
+    overflow-y: auto;
+}
+
+.shortcode {
+    margin: 5px 0px 5px 0px;
+}
+
+.X2FlowSwitch, .X2FlowSplitter {
+    .icon {
+        z-index: 1;
+        position: relative;
+        display: inline-block;
+        vertical-align: middle;
+        height: 30px;
+        width: 51px;
+        cursor: pointer;
+    }
+}
+
+.X2FlowSwitch {
+    & > .icon {
+        background: url(../images/x2flow/switch.png) top center no-repeat;
+    }
+}
+
+.X2FlowSplitter {
+    & > .icon {
+        background: url(../images/x2flow/old/switch.png) top center no-repeat;
+    }
+}
+
+.X2FlowSwitch {
+    & > .icon {
+        &:hover {
+            background-image: url(../images/x2flow/switch-hover.png);
+        }
+    }
+    &.selected > .icon {
+        background-image: url(../images/x2flow/switch-selected.png);
+        &:hover {
+            background-image: url(../images/x2flow/switch-selected-hover.png);
+        }
+    }
+}
+
+.X2FlowSplitter {
+    margin-left: -12px;
+    & > .icon {
+        &:hover {
+            background-image: url(../images/x2flow/old/switch-hover.png);
+        }
+    }
+    &.selected > .icon {
+        background-image: url(../images/x2flow/old/switch-selected.png);
+        &:hover {
+            background-image: url(../images/x2flow/old/switch-selected-hover.png);
+        }
+    }
+
+    &.x2flow-placeholder {
+        .icon {
+            background-image: none !important;
+        }
+        .icon-inner {
+            border: 3px solid $edgeColor;
+            border-radius: 13px;
+            height: 22px;
+            width: 22px;
+            position: relative;
+            left: 11px;
+            background: white;
+        }
+    }
+}
+
+.x2flow-placeholder .icon {
+    background-image: url(../images/x2flow/switch-placeholder.png) !important;
+}
+
+.x2flow-branch-wrapper {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: -27px;
+    .x2flow-branch {
+        &:first-child {
+            margin-bottom: 46px;
+        }
+        &:last-child {
+            margin-top: 20px;
+        }
+    }
+}
+
+#item-delete {
+    display: none;
+    position: absolute;
+    z-index: 3;
+    height: 12px;
+    width: 12px;
+    background: url(../images/x2flow/delete.png) -13px 0px no-repeat transparent;
+    cursor: pointer;
+    &:hover {
+        background-position: 0px 0px;
+    }
+}
+
+.X2FlowSwitch.x2flow-helper,
+.X2FlowSplitter.x2flow-helper {
+    background: none;
+    .x2flow-branch {
+        background: transparent;
+    }
+    .x2flow-branch-wrapper, .bracket, .x2flow-branch {
+        background: none !important;
+    }
+}
+
+.X2FlowSwitch .x2flow-branch,
+.X2FlowSplitter .x2flow-branch {
+    clear: both;
+    padding-left: 36px;
+    position: relative;
+}
+
+.x2flow-branch .bracket {
+    float: left;
+    width: 0;
+}
+
+.X2FlowSwitch .x2flow-branch .bracket,
+.X2FlowSplitter .x2flow-branch .bracket {
+    background-position: left center;
+    background-repeat: no-repeat;
+    width: 36px;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: -33px 0;
+    padding: 33px 0;
+    background-image: url(../images/x2flow/bracket-bottom2.gif);
+}
+
+.x2flow-branch-wrapper .x2flow-branch:first-child > .bracket {
+    bottom: 0;
+    background-image: url(../images/x2flow/bracket-top2.gif);
+}
+
+/**
+ * Workflow placeholder
+ */
+.x2flow-placeholder {
+    background: #fff;
+    border-color: #ccc;
+    background-image: none !important;
+    .x2flow-node {
+        border-color: #ccc;
+        background-image: none !important;
+    }
+    &.X2FlowSwitch,
+    &.X2FlowSplitter {
+        background: none;
+    }
+}
+
+.x2flow-action.x2flow-placeholder, .x2flow-trigger.x2flow-placeholder {
+    border: 2px solid #ccc;
+    border-color: #ccc;
+}
+
+/**
+ * Wait Stage Action
+ */
+.X2FlowWait {
+    background-image: url(../images/x2flow/X2FlowWait2.png);
+}
+
+/**
+ * Api Stage Action
+ */
+.X2FlowApiCall {
+    background-image: url(../images/x2flow/X2FlowApiCall.png);
+}
+
+/**
+ * Launch Campaign Stage Action
+ */
+.X2FlowCampaignLaunch {
+    background-image: url(../images/x2flow/X2FlowCampaignLaunch.png);
+}
+
+/**
+ * Create Action Stage Action
+ */
+.X2FlowCreateAction {
+    background-image: url(../images/x2flow/X2FlowCreateAction.png);
+}
+
+/**
+ * Create Activity Post Stage Action
+ */
+.X2FlowCreateEvent {
+    background-image: url(../images/x2flow/X2FlowCreateEvent.png);
+}
+
+/**
+ * Create Notification Stage Action
+ */
+.X2FlowCreateNotif {
+    background-image: url(../images/x2flow/X2FlowCreateNotif.png);
+}
+
+/**
+ * Create Reminder Stage Action
+ */
+.X2FlowCreateReminder {
+    background-image: url(../images/x2flow/X2FlowCreateReminder.png);
+}
+
+/**
+ * Create Email Stage Action
+ */
+.X2FlowEmail {
+    background-image: url(../images/x2flow/X2FlowEmail.png);
+}
+
+/**
+ * Create SMS Stage Action
+ */
+.X2FlowSms {
+    background-image: url(../images/x2flow/X2FlowRecordComment.png);
+}
+
+/**
+ * Email Open Stage Trigger
+ */
+.EmailOpenTrigger {
+    background-image: url(../images/x2flow/NewsletterEmailOpenTrigger.png);
+}
+
+/**
+ * Outbound Email Stage Trigger
+ */
+.OutboundEmailTrigger {
+    background-image: url(../images/x2flow/X2FlowOutboundEmail.png);
+}
+
+/**
+ * Inbound Email Stage Trigger
+ */
+.InboundEmailTrigger {
+    background-image: url(../images/x2flow/X2FlowInboundEmail.png);
+}
+
+/**
+ * Record Change Stage Action
+ */
+.X2FlowRecordChange {
+    background-image: url(../images/x2flow/X2FlowRecordReassign.png);
+}
+
+/**
+ * Record Comment Stage Action
+ */
+.X2FlowRecordComment {
+    background-image: url(../images/x2flow/X2FlowRecordComment.png);
+}
+
+/**
+ * Record Create Stage Action
+ */
+.X2FlowRecordCreate {
+    background-image: url(../images/x2flow/X2FlowRecordCreate.png);
+}
+
+/**
+ * Record Create Action Stage Action
+ */
+.X2FlowRecordCreateAction {
+    background-image: url(../images/x2flow/X2FlowCreateAction.png);
+}
+
+/**
+ * Record Change Stage Action
+ */
+.X2FlowRecordChange {
+    background-image: url(../images/x2flow/X2FlowRecordUpdate.png);
+}
+
+/**
+ * Record Delete Stage Action
+ */
+.X2FlowRecordDelete {
+    background-image: url(../images/x2flow/X2FlowRecordDelete.png);
+}
+
+/**
+ * Record Email Stage Action
+ */
+.X2FlowRecordEmail {
+    background-image: url(../images/x2flow/X2FlowEmail.png);
+}
+
+/**
+ * Record List Add Stage Action
+ */
+.X2FlowRecordListAdd {
+    background-image: url(../images/x2flow/X2FlowRecordListAdd.png);
+}
+
+/**
+ * Record List Remove Stage Action
+ */
+.X2FlowRecordListRemove {
+    background-image: url(../images/x2flow/X2FlowRecordListRemove.png);
+}
+
+/**
+ * Record Newsletter Add Stage Action
+ */
+.X2FlowRecordNewsletterAdd {
+    background-image: url(../images/x2flow/X2FlowRecordListAdd.png);
+}
+
+/**
+ * Record Reassign Stage Action
+ */
+.X2FlowRecordReassign {
+    background-image: url(../images/x2flow/X2FlowRecordReassign.png);
+}
+
+/**
+ * Record Tag Stage Action
+ */
+.X2FlowRecordTag {
+    background-image: url(../images/x2flow/X2FlowRecordTag.png);
+}
+
+/**
+ * Record Update Stage Action
+ */
+.X2FlowRecordUpdate {
+    background-image: url(../images/x2flow/X2FlowRecordUpdate.png);
+}
+
+/**
+ * Process Complete Stage Action
+ */
+.X2FlowWorkflowComplete {
+    background-image: url(../images/x2flow/X2FlowWorkflowComplete.png);
+}
+
+/**
+ * Process Revert Stage Action
+ */
+.X2FlowWorkflowRevert {
+    background-image: url(../images/x2flow/X2FlowWorkflowRevert.png);
+}
+
+/**
+ * Process Start Stage Action
+ */
+.X2FlowWorkflowStart {
+    background-image: url(../images/x2flow/X2FlowWorkflowStart.png);
+}
+
+/**
+ * Process Start Stage Stage Action
+ */
+.X2FlowWorkflowStartStage {
+    background-image: url(../images/x2flow/X2FlowWorkflowStartStage.png);
+}
+
+/**
+ * Process Complete Stage Stage Action
+ */
+.X2FlowWorkflowCompleteStage {
+    background-image: url(../images/x2flow/X2FlowWorkflowCompleteStage.png);
+}
+
+/**
+ * Process Revert Stage Stage action
+ */
+.X2FlowWorkflowRevertStage {
+    background-image: url(../images/x2flow/X2FlowWorkflowRevertStage.png);
+}
+
+/**
+ * Push Web Content Stage Action
+ */
+.X2FlowPushWebContent {
+    background-image: url(../images/x2flow/X2FlowPushWebContent.png);
+}
+
+/**
+ * Workflow action draggable
+ */
+.actions {
+    height: auto;
+    width: 100%;
+    margin-bottom: 0px;
+    padding-left: 0px;
+    overflow-y: hidden;
+
+    .x2flow-placeholder {
+        display: none;
+    }
+    .x2flow-branch-wrapper {
+        display: none;
+    }
+    .x2flow-node {
+        background-repeat: no-repeat;
+        height: auto;
+        min-height: 22px;
+        background-color: #eee;
+        background-position: 3px center;
+        cursor: pointer;
+        
+        padding: 2px 13px 2px 26px;
+        width: auto;
+        margin: 5px;
+        border: 1px solid white;
+        -moz-border-radius: 15px;
+        -o-border-radius: 15px;
+        -webkit-border-radius: 15px;
+        border-radius: 15px;
+
+        &:hover {
+            background-color: #fff;
+            border: 1px solid #eee;
+        }
+        span {
+            display: block;
+        }
+    }
+    .X2FlowSwitch {
+        background-image: url(../images/x2flow/small/switch.png);
+    }
+    .X2FlowSplitter {
+        background-image: url(../images/x2flow/small/old/switch.png);
+    }
+    .X2FlowWait {
+        background-image: url(../images/x2flow/small/X2FlowWait2.png);
+    }
+    .X2FlowApiCall {
+        background-image: url(../images/x2flow/small/X2FlowApiCall.png);
+    }
+    .X2FlowCampaignLaunch {
+        background-image: url(../images/x2flow/small/X2FlowCampaignLaunch.png);
+    }
+    .X2FlowCreateAction {
+        background-image: url(../images/x2flow/small/X2FlowCreateAction.png);
+    }
+    .X2FlowCreateEvent {
+        background-image: url(../images/x2flow/small/X2FlowCreateEvent.png);
+    }
+    .X2FlowCreateNotif {
+        background-image: url(../images/x2flow/small/X2FlowCreateNotif.png);
+    }
+    .X2FlowCreateReminder {
+        background-image: url(../images/x2flow/small/X2FlowCreateReminder.png);
+    }
+    .X2FlowEmail {
+        background-image: url(../images/x2flow/small/X2FlowEmail.png);
+    }
+    .X2FlowSms {
+        background-image: url(../images/x2flow/small/X2FlowRecordComment.png);
+    }
+    .X2FlowRecordChange {
+        background-image: url(../images/x2flow/small/X2FlowRecordReassign.png);
+    }
+    .X2FlowRecordComment {
+        background-image: url(../images/x2flow/small/X2FlowRecordComment.png);
+    }
+    .X2FlowRecordCreate {
+        background-image: url(../images/x2flow/small/X2FlowRecordCreate.png);
+    }
+    .X2FlowRecordCreateAction {
+        background-image: url(../images/x2flow/small/X2FlowCreateAction.png);
+    }
+    .X2FlowRecordDelete {
+        background-image: url(../images/x2flow/small/X2FlowRecordDelete.png);
+    }
+    .X2FlowRecordEmail {
+        background-image: url(../images/x2flow/small/X2FlowEmail.png);
+    }
+    .X2FlowRecordListAdd {
+        background-image: url(../images/x2flow/small/X2FlowRecordListAdd.png);
+    }
+    .X2FlowRecordListRemove {
+        background-image: url(../images/x2flow/small/X2FlowRecordListRemove.png);
+    }
+    .X2FlowRecordNewsletterAdd {
+        background-image: url(../images/x2flow/small/X2FlowRecordListAdd.png);
+    }
+    .X2FlowRecordReassign {
+        background-image: url(../images/x2flow/small/X2FlowRecordReassign.png);
+    }
+    .X2FlowRecordTag {
+        background-image: url(../images/x2flow/small/X2FlowRecordTag.png);
+    }
+    .X2FlowRecordUpdate {
+        background-image: url(../images/x2flow/small/X2FlowRecordUpdate.png);
+    }
+    .X2FlowWorkflowComplete {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowComplete.png);
+    }
+    .X2FlowWorkflowRevert {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowRevert.png);
+    }
+    .X2FlowWorkflowStart {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowStart.png);
+    }
+
+    //TODO: Change Process Image Names
+
+    .X2FlowWorkflowRevertStage {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowRevertStage.png);
+    }
+    .X2FlowWorkflowStartStage {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowStartStage.png);
+    }
+    .X2FlowWorkflowCompleteStage {
+        background-image: url(../images/x2flow/small/X2FlowWorkflowCompleteStage.png);
+    }
+    .X2FlowPushWebContent {
+        background-image: url(../images/x2flow/small/X2FlowPushWebContent.png);
+    }
+}
+
+.ActionCompleteTrigger {
+    background-image: url(../images/x2flow/ActionCompleteTrigger.png);
+}
+
+.ActionCreateTrigger {
+    background-image: url(../images/x2flow/ActionCreateTrigger.png);
+}
+
+.ActionOverdueTrigger {
+    background-image: url(../images/x2flow/ActionOverdueTrigger.png);
+}
+
+.ActionUncompleteTrigger {
+    background-image: url(../images/x2flow/ActionUncompleteTrigger.png);
+}
+
+.CampaignEmailClickTrigger {
+    background-image: url(../images/x2flow/CampaignEmailClickTrigger.png);
+}
+
+.CampaignEmailOpenTrigger {
+    background-image: url(../images/x2flow/CampaignEmailOpenTrigger.png);
+}
+
+.CampaignUnsubscribeTrigger {
+    background-image: url(../images/x2flow/CampaignUnsubscribeTrigger.png);
+}
+
+.CampaignWebActivityTrigger {
+    background-image: url(../images/x2flow/CampaignWebActivityTrigger.png);
+}
+
+.NewsletterEmailClickTrigger {
+    background-image: url(../images/x2flow/NewsletterEmailClickTrigger.png);
+}
+
+.NewsletterEmailOpenTrigger {
+    background-image: url(../images/x2flow/NewsletterEmailOpenTrigger.png);
+}
+
+.NewsletterUnsubscribeTrigger {
+    background-image: url(../images/x2flow/NewsletterUnsubscribeTrigger.png);
+}
+
+.NewsletterWebActivityTrigger {
+    background-image: url(../images/x2flow/NewsletterWebActivityTrigger.png);
+}
+
+.PeriodicTrigger {
+    background-image: url(../images/Clock.png);
+}
+
+.LocationTrigger {
+    background-image: url(../images/x2flow/X2FlowLocation.png);
+}
+
+.RecordCreateTrigger {
+    background-image: url(../images/x2flow/RecordCreateTrigger.png);
+}
+
+.RecordDeleteTrigger {
+    background-image: url(../images/x2flow/RecordDeleteTrigger.png);
+}
+
+.RecordTagAddTrigger {
+    background-image: url(../images/x2flow/X2FlowRecordTag.png);
+}
+
+.MacroTrigger {
+    background-image: url(../images/x2flow/X2FlowApiCall.png);
+}
+
+.RecordTagRemoveTrigger {
+    background-image: url(../images/x2flow/X2FlowRecordTag2.png);
+}
+
+.RecordUpdateTrigger {
+    background-image: url(../images/x2flow/RecordUpdateTrigger.png);
+}
+
+.RecordViewTrigger {
+    background-image: url(../images/x2flow/RecordViewTrigger.png);
+}
+
+.UserLoginTrigger {
+    background-image: url(../images/x2flow/UserLoginTrigger.png);
+}
+
+.UserLogoutTrigger {
+    background-image: url(../images/x2flow/UserLogoutTrigger.png);
+}
+
+.WebActivityTrigger {
+    background-image: url(../images/x2flow/WebActivityTrigger.png);
+}
+
+.WebleadTrigger {
+    background-image: url(../images/x2flow/WebleadTrigger.png);
+}
+
+.X2FlowTrigger {
+    background-image: url(../images/x2flow/X2FlowTrigger.png);
+}
+
+.ActionCreateTrigger {
+    background-image: url(../images/x2flow/ActionCreateTrigger.png);
+}
+
+.RecordInactiveTrigger {
+    background-image: url(../images/x2flow/RecordInactiveTrigger.png);
+}
+
+.TimerTrigger {
+    background-image: url(../images/x2flow/TimerTrigger.png);
+}
+
+.VoipInboundTrigger {
+    background-image: url(../images/x2flow/X2FlowRecordReassign.png);
+}
+
+.WorkflowCompleteStageTrigger {
+    background-image: url(../images/x2flow/WorkflowCompleteStageTrigger.png);
+}
+
+.WorkflowCompleteTrigger {
+    background-image: url(../images/x2flow/WorkflowCompleteTrigger.png);
+}
+
+.WorkflowRevertStageTrigger {
+    background-image: url(../images/x2flow/WorkflowRevertStageTrigger.png);
+}
+
+.WorkflowStartStageTrigger {
+    background-image: url(../images/x2flow/WorkflowStartStageTrigger.png);
+}
+
+.WorkflowStartTrigger {
+    background-image: url(../images/x2flow/WorkflowStartTrigger.png);
+}
+
+.TargetedContentRequestTrigger {
+    background-image: url(../images/x2flow/TargetedContentRequestTrigger.png);
+}
+
+#x2flow-config-box {
+    padding-top: 25px;
+    padding-right: 19px;
+    padding-bottom: 5px;
+    padding-left: 19px;
+    min-height: 150px;
+}
+
+#x2flow-config-box {
+    &.loading {
+        background: url(../images/loading.gif) right 10px top 10px no-repeat white;
+    }
+    fieldset {
+        margin: 0px 0px 0px 0px;
+        padding: 0;
+        border: none;
+    }
+}
+
+#x2flow-conditions {
+    margin: 10px 10px;
+}
+
+#x2flow-conditions fieldset {
+    margin: 10px;
+}
+
+#x2flow-main-config {
+    overflow: auto;
+    & > h2:first-child {
+    }
+    .x2flow-action-id {
+        float: right;
+        & + * {
+            clear: both;
+        }
+        .x2-hint {
+            margin-left: 5px;
+        }
+    }
+    label {
+        width: 160px;
+        margin-top: 5px;
+        margin-right: 14px;
+    }
+    input[type="text"] {
+        width: 200px;
+    }
+    .row {
+        overflow: hidden;
+    }
+}
+
+.x2-flow-config-info {
+    margin-top: 9px;
+    margin-bottom: 9px;
+}
+
+#x2flow-add-condition {
+    display: inline-block;
+}
+
+/* prevent unnecessary right scrollbar */
+
+#x2flow-main .ui-resizable-s {
+    bottom: 0px !important;
+}
+
+
+/*
+labels
+*/
+
+.x2flow-yes-label {
+    display: inline;
+    font-size: 8pt;
+    top: -14px;
+    position: relative;
+    color: rgb(85, 85, 85);
+}
+
+.x2flow-no-label {
+    display: inline;
+    font-size: 8pt;
+    position: relative;
+    top: 30px;
+    left: -18px;
+    color: rgb(85, 85, 85);
+}
+
+.x2flow-node {
+    > div.x2flow-icon-label {
+        width: 70px;
+        height: 50px;
+        text-align: center;
+        display: block;
+        position: relative;
+        top: 36px;
+        left: -15px;
+        font-size: 8pt;
+        color: rgb(85, 85, 85) !important;
+        white-space: normal;
+    }
+    &.x2flow-trigger > div.x2flow-icon-label {
+        width: 76px;
+        left: -18px;
+    }
+}
+
+div.x2flow-placeholder div {
+    &.x2flow-yes-label, &.x2flow-no-label, &.x2flow-icon-label {
+        display: none;
+    }
+}
+
+.actions .x2flow-node > div.x2flow-icon-label, .x2flow-node.x2flow-placeholder > div.x2flow-icon-label {
+    display: none;
+}
+
+.x2flow-helper {
+    > div.x2flow-icon-label {
+        display: none;
+    }
+    div {
+        &.x2flow-icon-label, &.x2flow-yes-label, &.x2flow-no-label {
+            display: none;
+        }
+    }
+}
+
+/*
+label toggle checkbox
+*/
+
+#x2flow-show-labels-checkbox-container {
+    line-height: 40px;
+    width: 143px !important;
+    label {
+        float: left;
+        vertical-align: middle;
+        display: inline;
+        margin-right: 4px;
+    }
+}
+
+#x2flow-show-labels-checkbox {
+    vertical-align: middle;
+    display: inline;
+    margin-top: 14px;
+}
+
+/* 
+rules for config box rich text field 
+*/
+
+#x2flow-main-config .editor-container {
+    min-width: 550px;
+    width: 75%;
+    max-width: 750px;
+}
+
+#cke_configFormEditor {
+    margin-bottom: 5px !important;
+}
+
+/*
+trigger logs
+*/
+
+#x2flow-trace-menu {
+    .gridview-button {
+        margin-right: 4px;
+    }
+}
+
+#x2flow-trace-box {
+    padding: 0;
+}
+
+#trigger-log-dialog {
+    max-height: "500px";
+    overflow-x: "hidden";
+}
+
+#x2flow-main-config {
+    input, textarea {
+    }
+}
+
+#trigger-log-fmt a {
+    span {
+        color: #004baf;
+    }
+    color: #004baf;
+    outline: 0;
+}
+
+/*
+targeted content
+*/
+
+#targeted-content-embed-code-container {
+    p {
+        margin-bottom: 4px;
+        width: 550px;
+        font-size: 11.5px;
+        clear: both;
+    }
+    h4 {
+        margin-top: 0;
+        float: left;
+    }
+    textarea {
+        width: 640px;
+        height: 16px;
+    }
+}
+
+#x2flow-main-config .default-web-content-fieldset label {
+    width: 132px;
+}
+
+#x2flow-add-attribute, #x2flow-add-header {
+    display: inline-block;
+    margin-right: 8px;
+}

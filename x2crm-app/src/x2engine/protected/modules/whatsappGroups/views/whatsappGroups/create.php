@@ -1,0 +1,202 @@
+<?php
+/**
+ * Create WhatsApp Group View
+ */
+?>
+
+<div id="x2-layout">
+    <div id="x2-layout-content">
+        <div class="page-title icon custom-module"><h2>Create WhatsApp Group</h2></div>
+
+        <?php if (Yii::app()->user->hasFlash('error')): ?>
+            <div class="alert alert-danger">
+                <?php echo Yii::app()->user->getFlash('error'); ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="panel panel-default" style="max-width: 600px;">
+            <div class="panel-body">
+                <?php $form = $this->beginWidget('CActiveForm', array('action' => array('create'), 'method' => 'POST')); ?>
+
+                    <div class="form-group">
+                        <label for="groupName">Group Name <span style="color: red;">*</span></label>
+                        <input type="text" id="groupName" name="groupName" class="form-control" placeholder="e.g., Sales Team" required>
+                        <small class="form-text text-muted">The name of the WhatsApp group</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="listId">Filter by List (Optional)</label>
+                        <p class="text-muted">
+                            Pick one of your dynamic <?php echo CHtml::link('Contact Lists', array('/contacts/contacts/lists')); ?>
+                            to use its live filter criteria as this group's membership, instead of picking contacts manually below.
+                            The group stays linked to the list, so you can re-sync its WhatsApp members later as matching contacts change.
+                        </p>
+                        <select id="listId" name="listId" class="form-control">
+                            <option value="">-- No list, select contacts manually --</option>
+                            <?php foreach ($lists as $list): ?>
+                                <option value="<?php echo $list->id; ?>"><?php echo CHtml::encode($list->name); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="manualContactsGroup">
+                        <label>Add Contacts (Optional)</label>
+                        <p class="text-muted">Select contacts to add as initial members. Only contacts with phone numbers will be added.</p>
+
+                        <div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
+                            <input type="text" id="contactFilter" class="form-control" placeholder="Search contacts..." style="max-width: 250px;">
+                            <a href="#" id="selectAllContacts">Select all</a>
+                            <a href="#" id="selectNoneContacts">Select none</a>
+                        </div>
+
+                        <div id="contactsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #fafafa;">
+                            <?php foreach ($contacts as $contact): ?>
+                                <?php if ($contact->phone): ?>
+                                    <div class="checkbox contact-item" data-name="<?php echo strtolower(CHtml::encode($contact->name)); ?>">
+                                        <label>
+                                            <input type="checkbox" name="contacts[]" value="<?php echo $contact->id; ?>">
+                                            <strong><?php echo CHtml::encode($contact->name); ?></strong>
+                                            <br>
+                                            <small class="text-muted"><?php echo CHtml::encode($contact->phone); ?></small>
+                                        </label>
+                                    </div>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <small class="form-text text-muted" style="display: block; margin-top: 8px;">
+                            <?php echo Contacts::model()->count(array('condition' => 'phone IS NOT NULL AND phone != ""')); ?> contacts have phone numbers.
+                        </small>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <?php echo CHtml::submitButton('Create Group', array('class' => 'btn btn-primary')); ?>
+                        <?php echo CHtml::link('Cancel', array('index'), array('class' => 'btn btn-default')); ?>
+                    </div>
+
+                <?php $this->endWidget(); ?>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('contactFilter').addEventListener('keyup', function() {
+        var filter = this.value.toLowerCase();
+        var items = document.querySelectorAll('.contact-item');
+
+        items.forEach(function(item) {
+            if (item.dataset.name.indexOf(filter) > -1) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    });
+    document.getElementById('selectAllContacts').addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.contact-item:not([style*="display: none"]) input[type=checkbox]').forEach(function(cb) {
+            cb.checked = true;
+        });
+    });
+    document.getElementById('selectNoneContacts').addEventListener('click', function(e) {
+        e.preventDefault();
+        document.querySelectorAll('.contact-item input[type=checkbox]').forEach(function(cb) {
+            cb.checked = false;
+        });
+    });
+    document.getElementById('listId').addEventListener('change', function() {
+        var manual = document.getElementById('manualContactsGroup');
+        manual.style.display = this.value ? 'none' : '';
+    });
+</script>
+
+<style>
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+    }
+    .form-control {
+        display: block;
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .form-control:focus {
+        outline: none;
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    .text-muted {
+        color: #6c757d;
+    }
+    .form-text {
+        font-size: 12px;
+    }
+    .checkbox {
+        margin-bottom: 12px;
+        padding: 8px;
+        border-radius: 3px;
+        transition: background-color 0.2s;
+    }
+    .checkbox:hover {
+        background-color: #f0f0f0;
+    }
+    .checkbox label {
+        margin: 0;
+        font-weight: normal;
+        display: flex;
+        align-items: flex-start;
+    }
+    .checkbox input[type="checkbox"] {
+        margin-right: 10px;
+        margin-top: 3px;
+    }
+    .alert {
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+    }
+    .alert-danger {
+        color: #721c24;
+        background-color: #f8d7da;
+        border-color: #f5c6cb;
+    }
+    .panel {
+        border: 1px solid #ddd;
+    }
+    .panel-body {
+        padding: 20px;
+    }
+    .btn {
+        padding: 8px 16px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        display: inline-block;
+        text-decoration: none;
+        margin-right: 8px;
+    }
+    .btn-primary {
+        background-color: #007bff;
+        color: white;
+    }
+    .btn-primary:hover {
+        background-color: #0056b3;
+    }
+    .btn-default {
+        background-color: #f8f9fa;
+        color: #333;
+        border-color: #ddd;
+    }
+    .btn-default:hover {
+        background-color: #e2e6ea;
+    }
+</style>

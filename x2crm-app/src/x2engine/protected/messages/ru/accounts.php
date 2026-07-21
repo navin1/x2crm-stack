@@ -1,0 +1,15 @@
+<?php return array (
+  'Revenue' => 'Доход',
+  'Symbol' => 'Символ',
+  'Employees' => 'Сотрудники',
+  'Parent' => 'Родитель',
+  'Account Record' => 'Запись контрагента',
+  'Campaign Form' => 'Форма почтовой рассылки',
+  'Primary Contact' => 'Основное контактное лицо',
+  'Bug Report Attributes' => 'Атрибуты отчета об ошибках',
+  'Share {opportunity}' => 'Поделиться {opportunity}',
+  '{account}' => '{account}',
+  '{module} Report' => 'Отчет {module}',
+  'This form will allow you to generate a campaign to mail related {contacts} of the {accounts} displayed in the report below. Select "Primary {contacts}" to only email {contacts} which are set as the Primary {contact} for an {account}. Select "All" to email all related {contacts} on each {account}.' => 'Эта форма позволит вам создать почтовую рассылку для связанных {contacts} из {accounts}, отображаемых в приведенном ниже отчете. Выберите "Основной {contacts}" для отправки писем только тем {contacts}, которые устанавливаются в качестве основного {contact} для {account}. Выберите "Все", для отправки всем связанным {contacts} каждого {account}',
+  'Primary {module}' => 'Основной {module}',
+);

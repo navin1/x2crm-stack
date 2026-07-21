@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get in Touch</title>
+<style>
+  :root {
+    --accent: #6366f1;
+    --accent-dark: #4f46e5;
+    --ink: #1f2333;
+    --muted: #6b7280;
+    --error: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    padding: 40px 36px;
+  }
+  .logo-placeholder, .logo {
+    display: block;
+    margin: 0 auto 20px;
+    width: 56px;
+    height: 56px;
+  }
+  .logo-placeholder {
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo-placeholder svg { width: 28px; height: 28px; }
+  .logo {
+    object-fit: contain;
+  }
+  .card h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    color: var(--ink);
+    text-align: center;
+  }
+  .card p.subtitle {
+    margin: 0 0 28px;
+    color: var(--muted);
+    font-size: 15px;
+    text-align: center;
+  }
+  .field { margin-bottom: 18px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--ink);
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .field textarea { resize: vertical; min-height: 80px; }
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  button[type="submit"] {
+    width: 100%;
+    padding: 13px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  button[type="submit"]:hover { background: var(--accent-dark); }
+  button[type="submit"]:active { transform: scale(0.99); }
+  button[type="submit"]:disabled { background: #a5a6f6; cursor: not-allowed; }
+  .status {
+    display: none;
+    margin-bottom: 18px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .status.show { display: block; }
+  .status.error { background: #fef2f2; color: var(--error); border: 1px solid #fecaca; }
+  .footnote {
+    margin: 18px 0 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .inactive-notice {
+    display: none;
+    text-align: center;
+    padding: 20px 0;
+  }
+  .inactive-notice.show { display: block; }
+  .inactive-notice svg { width: 40px; height: 40px; margin-bottom: 12px; }
+  .inactive-notice p { color: var(--muted); font-size: 15px; margin: 0; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <!-- Swap this block for <img src="/logo.png" alt="Company logo" class="logo"> once you
+         have a real logo file — placeholder shown until then. -->
+    <div class="logo-placeholder">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 21V8l9-5 9 5v13h-6v-7H9v7H3z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>Get in Touch</h1>
+    <p class="subtitle">Fill out the form below and we'll reach out shortly.</p>
+
+    <div class="status error" id="statusBox"></div>
+
+    <div class="inactive-notice" id="inactiveNotice">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="9" stroke="#9ca3af" stroke-width="1.8"/>
+        <path d="M9 9l6 6M15 9l-6 6" stroke="#9ca3af" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <p id="inactiveMessage">This form is no longer accepting submissions.</p>
+    </div>
+
+    <form id="leadForm" method="POST" action="/index.php/contacts/contacts/weblead?webFormId=2">
+      <input type="hidden" name="YII_CSRF_TOKEN" id="csrfToken" value="">
+
+      <div class="row-2">
+        <div class="field">
+          <label for="firstName">First name *</label>
+          <input type="text" id="firstName" name="Contacts[firstName]" required>
+        </div>
+        <div class="field">
+          <label for="lastName">Last name *</label>
+          <input type="text" id="lastName" name="Contacts[lastName]" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="email">Email *</label>
+        <input type="email" id="email" name="Contacts[email]" required>
+      </div>
+
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" name="Contacts[phone]" placeholder="+1 555 123 4567">
+      </div>
+
+      <div class="field">
+        <label for="backgroundInfo">Message</label>
+        <textarea id="backgroundInfo" name="Contacts[backgroundInfo]" placeholder="Tell us a bit about what you need..."></textarea>
+      </div>
+
+      <button type="submit" id="submitBtn">Submit</button>
+    </form>
+
+    <p class="footnote">Your information is kept private and used only to get back to you.</p>
+  </div>
+
+<script>
+(function () {
+  // This page's own row in x2_custom_lead_forms — used to check whether
+  // it's still active before showing the form (and again right before
+  // submit, to close most of the race window if it gets deactivated while
+  // someone already has the page open).
+  var LEAD_FORM_ID = 1;
+  // Same-origin path, proxied to wa_hub:3001 by Caddy — works under HTTPS
+  // in production and doesn't depend on wa-hub's port being published.
+  var FORM_STATUS_URL = '/form-status/' + LEAD_FORM_ID;
+
+  var form = document.getElementById('leadForm');
+  var submitBtn = document.getElementById('submitBtn');
+  var statusBox = document.getElementById('statusBox');
+  var csrfInput = document.getElementById('csrfToken');
+  var inactiveNotice = document.getElementById('inactiveNotice');
+  var inactiveMessage = document.getElementById('inactiveMessage');
+
+  function showError(msg) {
+    statusBox.textContent = msg;
+    statusBox.classList.add('show');
+  }
+
+  function showInactive(reason) {
+    form.style.display = 'none';
+    inactiveMessage.textContent = reason === 'scheduled'
+      ? 'This form has expired and is no longer accepting submissions.'
+      : 'This form is no longer accepting submissions.';
+    inactiveNotice.classList.add('show');
+  }
+
+  function checkStatus() {
+    // Fails open on network error (e.g. FORM_STATUS_URL unreachable) —
+    // an unreachable status check shouldn't itself block real submissions.
+    return fetch(FORM_STATUS_URL)
+      .then(function (r) { return r.json(); })
+      .then(function (data) { return data.active !== false; })
+      .catch(function () { return true; });
+  }
+
+  function initForm() {
+    // The form POSTs to X2CRM's own lead-capture endpoint, which requires
+    // a valid CSRF token tied to the current session. Fetch it once from
+    // that same endpoint's GET response (same-origin, so cookies and the
+    // token line up) rather than hardcoding anything server-rendered here,
+    // since this is a plain static file with no PHP behind it.
+    submitBtn.disabled = true;
+    fetch('/index.php/contacts/contacts/weblead', { credentials: 'same-origin' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var match = html.match(/name="YII_CSRF_TOKEN"[^>]*value="([^"]+)"/) ||
+                    html.match(/value="([^"]+)"[^>]*name="YII_CSRF_TOKEN"/);
+        if (match) {
+          csrfInput.value = match[1];
+          submitBtn.disabled = false;
+        } else {
+          showError('Could not initialize the form. Please refresh the page and try again.');
+        }
+      })
+      .catch(function () {
+        showError('Could not reach the server. Please check your connection and try again.');
+      });
+  }
+
+  fetch(FORM_STATUS_URL)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.active === false) {
+        showInactive(data.reason);
+      } else {
+        initForm();
+      }
+    })
+    .catch(function () {
+      // Status check itself unreachable — fail open rather than block a
+      // visitor from a working form over a status-check network hiccup.
+      initForm();
+    });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    checkStatus().then(function (active) {
+      if (active) {
+        form.submit();
+      } else {
+        showInactive('deactivated');
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

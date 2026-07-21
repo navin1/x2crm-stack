@@ -1,0 +1,16 @@
+{
+  "name": "x2crm-integration",
+  "version": "1.0.0",
+  "description": "Middleware syncing X2CRM with MailerLite",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.10.0"
+  }
+}

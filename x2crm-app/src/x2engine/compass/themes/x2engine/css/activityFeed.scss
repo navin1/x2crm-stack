@@ -1,0 +1,579 @@
+/*!*********************************************************************************
+ * X2Engine Open Source Edition is a customer relationship management program developed by
+ * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * 
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License version 3 as published by the
+ * Free Software Foundation with the addition of the following permission added
+ * to Section 15 as permitted in Section 7(a): FOR ANY PART OF THE COVERED WORK
+ * IN WHICH THE COPYRIGHT IS OWNED BY X2ENGINE, X2ENGINE DISCLAIMS THE WARRANTY
+ * OF NON INFRINGEMENT OF THIRD PARTY RIGHTS.
+ * 
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+ * details.
+ * 
+ * You should have received a copy of the GNU Affero General Public License along with
+ * this program; if not, see http://www.gnu.org/licenses or write to the Free
+ * Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301 USA.
+ * 
+ * You can contact X2Engine, Inc. P.O. Box 610121, Redwood City,
+ * California 94061, USA. or at email address contact@x2engine.com.
+ * 
+ * The interactive user interfaces in modified source and object code versions
+ * of this program must display Appropriate Legal Notices, as required under
+ * Section 5 of the GNU Affero General Public License version 3.
+ * 
+ * In accordance with Section 7(b) of the GNU Affero General Public License version 3,
+ * these Appropriate Legal Notices must retain the display of the "Powered by
+ * X2 Engine" logo. If the display of the logo is not reasonably feasible for
+ * technical reasons, the Appropriate Legal Notices must display the words
+ * "Powered by X2 Engine".
+ **********************************************************************************/
+
+
+
+
+/**
+*  
+* styling page for activity feed. Most icons for the activity feed are
+* generated here. 
+*
+**/
+
+@import "colors";
+@import "standards";
+@import "x2-icons";
+@import "icons";
+
+/***********************************************************************
+* image attachments
+***********************************************************************/
+
+#activity-feed-container {
+    @include border-radius(2px !important);
+    margin-right: 0px;
+
+    .event-text {
+        .topic-preview {
+            margin: 0;
+            margin-top: 3px;
+            margin-bottom: 3px;
+            font-style: inherit;
+        }
+    }
+
+    .attachment-img {
+        height: 100px;
+    }
+
+    div.page-title .x2-button.right {
+        margin: 5px 5px 5px 0px;
+    }
+
+    /*
+    override attachments widget style
+    */
+
+    #attachment-form {
+        .focus-mini-module {
+            box-shadow: none;
+        }
+        .form {
+            -moz-border-radius: 0px;
+            -o-border-radius: 0px;
+            -webkit-border-radius: 0px;
+            border-radius: 0px;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            margin-bottom: 0;
+        }
+    }
+
+    /*
+    override spectrum color picker css
+    */
+
+    .sp-replacer {
+        padding: 0px !important;
+        margin-left: 4px !important;
+        position: relative;
+        top: -2px;
+    }
+
+    .sp-dd {
+        height: 13px !important;
+    }
+
+    .sp-preview {
+        width: 20px !important;
+        height: 17px !important;
+        margin-right: 5px !important;
+    }
+
+    /*
+    Broadcast Dialog
+    */
+
+    #broadcast-dialog-user-select {
+        width: 460px;
+        height: 200px;
+    }
+
+    .dialog-explanation {
+        margin-bottom: 8px;
+        margin-top: 7px;
+    }
+
+    #broadcast-dialog {
+        label {
+            margin-bottom: 4px;
+        }
+        .sp-replacer {
+            margin-top: 6px;
+        }
+    }
+
+    /*
+    ckeditor
+    */
+
+    #cke_Events_text {
+        margin-bottom: 6px !important;
+    }
+
+    /* collapse bottom bar */
+
+    .cke_bottom {
+        background: none !important;
+        border-top: none !important;
+        display: inline !important;
+        height: 0px !important;
+        width: 0px !important;
+        padding: 0 0 0 0 !important;
+        margin: 0 0 0 0 !important;
+    }
+
+    /* move resizing handle */
+
+    .cke_resizer_ltr {
+        margin-right: 2px !important;
+    }
+
+    /*
+    Miscellaneous
+    */
+
+    .avatar-image {
+        /*border: 3px solid #f8f8f8;*/
+        border: 1px;
+        @include border-radius(4px);
+    }
+
+    .social-tabs a {
+        text-decoration: none;
+    }
+
+    .comment-textbox {
+        -webkit-appearance: none;
+        height: 22px;
+        width: 70% !important;
+        box-sizing: border-box;
+        -webkit-box-sizing: border-box;
+        -moz-box-sizing: border-box;
+        border: 1px solid #AAA;
+        font-size: 12px;
+        font-family: Arial, Helvetica, sans-serif;
+        @include border-radius(3px);
+        background: white;
+        margin-left: 60px;
+    }
+
+    .comment-box .items {
+        margin-left: 55px;
+        // padding-right: 15px;
+        border: none;
+        // background: none;
+
+        > .view {
+            background: white;
+            word-break: break-word;
+            border-left: 1px solid #e0e0e0;
+
+            &:first-child {
+                background: white;
+                word-break: break-word;
+            }
+
+            &:last-child {
+                background: white;
+                word-break: break-word;
+            }
+        }
+    }
+
+    .important {
+        background-color: #FFFFC2;
+    }
+
+    #activity-feed .pager {
+        visibility: hidden;
+    }
+
+    .yiiPager {
+        display: none;
+    }
+
+    .activity-feed div.like-history-box {
+        padding-top: 6px;
+    }
+
+    #sticky-feed {
+        .important-action {
+            background: #FFFFC2;
+        }
+    }
+
+    #activity-feed.list-view .view.top-level.activity-feed {
+        padding: 12px;
+        overflow: auto;
+        &.important-action {
+            background: $lightBabyBlue;
+        }
+    }
+
+    /* make sticky feed posts broadcast bg color take fill entire space */
+
+    #sticky-feed .top-level.activity-feed {
+        overflow: auto;
+    }
+
+    .items {
+        @include border-radius(0px !important);
+        border-top: none !important;
+        border-left: none !important;
+        border-right: none !important;
+    }
+
+    /* Used to prevent issue with jquery expandable plugin. Allows expandable text
+    to float around the truncated text. */
+
+    .expandable-details-override {
+        display: inline !important;
+    }
+
+    .event-bottom-row {
+        margin-top: -5px;
+        .comment-age {
+            display: inline-block;
+            margin-top: 8px;
+            color: $darkBlue;
+            /* @theme color link */
+            @include opacity-hover(0.8);
+        }
+        .event-icon-button-container {
+            display: inline-block;
+            margin-top: -7px;
+        }
+    }
+
+    div#post-form {
+        margin-bottom: 0 !important;
+        border-top: none;
+        border-left: none;
+        border-right: none;
+        border-radius: 0;
+    }
+
+    .event-icon-button-container > * {
+        height: 20px;
+        opacity: 0.9;
+        display: inline-block;
+    }
+
+
+    .important-link, .sticky-link {
+        &.x2-hint {
+            color: $gray;
+        }
+    }
+
+    .deleteButton {
+        @include opacity-hover(0.5);
+    }
+
+    #checkInComment {
+        display: none;
+        width: 100%;
+    }
+
+    #toggle-attachment-menu-button {
+        margin-top: 0px;
+    }
+
+
+    /*******************************************
+    * pseudo elements to base the icons on
+    ******************************************/
+    %icon {
+        margin-left: 10px;
+    }
+
+    %active-icon {
+        @extend %icon;
+        opacity: 0.6;
+        cursor: pointer;
+        color: $nearBlack;
+
+        &:hover {
+            opacity: 0.8;
+        }
+    }
+
+    %inactive-icon {
+        @extend %icon;
+        opacity: 1.0;
+        cursor: pointer;
+
+        &:hover {
+            opacity: 0.9;
+        }
+    }
+
+    .feed-comment-icon, .broadcast-icon, .like-icon, .sticky-icon, .feed-make-important-icon{
+        @extend %active-icon;
+    }
+
+    .unsticky-icon, .unlike-icon, .feed-make-unimportant-icon {
+        @extend %inactive-icon;
+    }
+
+    .like-count {
+        @extend %active-icon;
+        opacity: 0.6;
+        padding-left: 3px;
+        color: $darkBlue;
+        margin-left: 0px;
+    }
+
+    .unlike-button[style*="none"] + .like-count {
+        color: $nearBlack;
+    }
+
+    #activity-feed-settings-button {
+        cursor: pointer;
+        float: right;
+        margin-top: 8px;
+        margin-right: 5px;
+        @include titleBarIconButton;
+    }
+
+    #second-row-buttons-container {
+        display: block;
+        margin-top: 7px;
+    }
+
+    /*********************************
+    * Activity Feed Icon Styling
+    ********************************/
+    .img-box {
+        /* 
+        ** TODO: We need to find a better way to exclude open source styling 
+        ** changes from enterprise. (Perhaps edit the build script for a /* x2openstart *\/
+        ** and a /* x2openend *\/)
+        **/
+
+        $fa-map: (
+            ("action_complete"   "play-circle" "check")
+            ("action_reminder"   "exclamation-circle")
+            ("calendar_event"    "")
+            ("generic_calendar_event" "calendar-o") // This is just for the icon reference page
+            ("doc_update"        "file-text")
+
+            ("email_from"        "envelope")
+            ("email_clicked"     "envelope")
+
+            ("email_sent"         "envelope" "arrow-right")
+            ("email_sent_quote"   "envelope" "arrow-right")
+            ("email_sent_invoice" "envelope" "arrow-right")
+            ("invoice_emailed"    "envelope")
+            ("media"              "file-photo-o")
+            ("feed"               "user")
+            ("notif"              "comment")
+            ("voip_call"          "phone")
+            ("quote_emailed"      "envelope")
+            ("record_create"      "folder")
+            ("record_deleted"     "trash")
+            ("web_activity"       "globe")
+            ("weblead_create"     "globe" "star")
+            ("topic_reply"        "comment-o") 
+            );
+
+        $x2-map: (
+            ("log_time"             "stopwatch")
+            ("case_escalated"       "service" "arrow-up")
+            ("email_opened"         "open-envelope")
+            ("email_opened_quote"   "open-envelope")
+            ("email_opened_invoice" "open-envelope")
+            ("workflow_revert"      "funnel" "undo")
+            ("workflow_complete"    "funnel" "check")
+            ("workflow_start"       "funnel" "arrow-right")
+        );
+
+        $fa-map: ();
+        $x2-map: ();
+
+        @include generate-icons ($fa-map);
+        @include generate-icons ($x2-map, 'x2');
+
+
+        &.record_create {
+            content: "";
+
+            $fa-map: ();
+            $x2-map: ();
+
+            @include generate-icons($fa-map);
+            @include generate-icons($x2-map, 'x2');
+
+        }
+
+    }
+
+    .img-box {
+        display: block;
+        float: left;
+        position: relative;
+        overflow: visible;
+
+        text-align: center;
+        font-size: 35px;
+        color: $darkBlue;
+        /* @theme color lighter_link */
+
+        width: 50px;
+        height: 45px;
+
+        &:before {
+            font-size: 30px !important;
+        }
+        &.action_complete {
+            background-image: url(../images/eventIcons/action_complete.png);
+        }
+        &.action_reminder {
+            background-image: url(../images/eventIcons/action_reminder.png);
+        }
+        &.calendar_event {
+            background-image: url();
+        }
+        &.case_escalated {
+            background-image: url(../images/eventIcons/case_escalated.png);
+        }
+        &.doc_update {
+            background-image: url(../images/eventIcons/doc_update.png);
+        }
+        &.email_from {
+            background-image: url(../images/eventIcons/email_from.png);
+        }
+        &.email_opened, &.email_opened_quote, &.email_opened_invoice {
+            background-image: url(../images/eventIcons/email_opened.png);
+        }
+        &.email_clicked {
+            background-image: url(../images/eventIcons/web_activity.png);
+        }
+        &.email_sent, &.email_sent_quote, &.email_sent_invoice {
+            background-image: url(../images/eventIcons/email_sent.png);
+        }
+        &.feed {
+            background-image: url(../images/eventIcons/default.png);
+        }
+        &.invoice_emailed {
+            background-image: url(../images/eventIcons/invoice_emailed.png);
+        }
+        &.media {
+            background-image: url(../images/eventIcons/media.png);
+        }
+        &.notif {
+            background-image: url(../images/eventIcons/notif.png);
+        }
+        &.voip_call {
+            background-image: url(../images/eventIcons/voip_call.png);
+        }
+        &.log_time {
+            background-image: url(../images/action_time.png);
+        }
+        &.quote_emailed {
+            background-image: url(../images/eventIcons/quote_emailed.png);
+        }
+        &.record_create {
+            background-image: url(../images/eventIcons/record_create.png);
+        }
+        &.record_deleted {
+            background-image: url(../images/eventIcons/record_deleted.png);
+        }
+        &.web_activity {
+            background-image: url(../images/eventIcons/web_activity.png);
+        }
+        &.weblead_create {
+            background-image: url(../images/eventIcons/weblead_create.png);
+        }
+        &.workflow_complete {
+            background-image: url(../images/eventIcons/workflow_complete.png);
+        }
+        &.workflow_revert {
+            background-image: url(../images/eventIcons/workflow_revert.png);
+        }
+        &.workflow_start {
+            background-image: url(../images/eventIcons/workflow_start.png);
+        }
+        &.plus-sign {
+            margin-top: 25px;
+            margin-left: 5px;
+            background-image: url(../images/Plus_sign.png);
+            height: 20px;
+            width: 65px;
+        }
+        &.record_create {
+            &.Quote-create {
+                background-image: url(../images/quotes.png);
+            }
+            &.Contacts-create {
+                background-image: url(../images/contacts.png);
+            }
+            &.Campaign-create {
+                background-image: url(../images/campaign_create.png);
+            }
+            &.Actions-create {
+                background-image: url(../images/actions.png);
+            }
+            &.Accounts-create {
+                background-image: url(../images/accounts.png);
+            }
+            &.Opportunity-create {
+                background-image: url(../images/opportunities.png);
+            }
+            &.Product-create {
+                background-image: url(../images/products.png);
+            }
+            &.X2Leads-create {
+                background-image: url(../images/x2Leads.png);
+            }
+            &.Docs-create {
+                background-image: url(../images/docs.png);
+            }
+            &.Services-create {
+                background-image: url(../images/services.png);
+            }
+            &.Groups-create {
+                background-image: url(../images/groups.png);
+            }
+            &.BugReports-create {
+                background-image: url(../images/bugreports.png);
+            }
+        }
+    }
+
+}
