@@ -128,9 +128,21 @@ CREATE TABLE IF NOT EXISTS `x2_custom_lead_forms` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 
 -- ---------------------------------------------------------------------
--- 2. Columns added on top of a STOCK X2Engine table (production's copy
---    of x2_web_forms exists, but won't have these two columns)
+-- 2. Columns added on top of a STOCK X2Engine table — IF production's
+--    copy of x2_web_forms exists at all. Confirmed in the wild: a
+--    production instance that never actually used X2CRM's native
+--    "Web Lead Form" builder (Marketing module) can genuinely lack this
+--    table entirely, not just be missing these two columns. Web Form
+--    Notifications (WhatsappGroupsController::actionWebFormNotify) simply
+--    won't have anything to manage in that case until the Marketing
+--    module actually gets used, which is fine — skip gracefully rather
+--    than failing the whole reconcile run.
 -- ---------------------------------------------------------------------
+
+SET @web_forms_table_exists = (
+  SELECT COUNT(*) FROM information_schema.tables
+  WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms'
+);
 
 -- ADD COLUMN IF NOT EXISTS needs MySQL 8.0.29+ — production dumps can land
 -- on an older 8.0.x build (confirmed: this broke on a freshly pulled
@@ -141,7 +153,7 @@ SET @active_exists = (
   SELECT COUNT(*) FROM information_schema.columns
   WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms' AND column_name = 'active'
 );
-SET @sql = IF(@active_exists = 0,
+SET @sql = IF(@web_forms_table_exists > 0 AND @active_exists = 0,
   'ALTER TABLE `x2_web_forms` ADD COLUMN `active` tinyint(1) NOT NULL DEFAULT ''1''',
   'SELECT 1'
 );
@@ -153,7 +165,7 @@ SET @deactivate_exists = (
   SELECT COUNT(*) FROM information_schema.columns
   WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms' AND column_name = 'deactivateAt'
 );
-SET @sql = IF(@deactivate_exists = 0,
+SET @sql = IF(@web_forms_table_exists > 0 AND @deactivate_exists = 0,
   'ALTER TABLE `x2_web_forms` ADD COLUMN `deactivateAt` bigint DEFAULT NULL',
   'SELECT 1'
 );
