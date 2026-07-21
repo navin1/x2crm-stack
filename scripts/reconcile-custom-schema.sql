@@ -132,9 +132,34 @@ CREATE TABLE IF NOT EXISTS `x2_custom_lead_forms` (
 --    of x2_web_forms exists, but won't have these two columns)
 -- ---------------------------------------------------------------------
 
-ALTER TABLE `x2_web_forms`
-  ADD COLUMN IF NOT EXISTS `active` tinyint(1) NOT NULL DEFAULT '1',
-  ADD COLUMN IF NOT EXISTS `deactivateAt` bigint DEFAULT NULL;
+-- ADD COLUMN IF NOT EXISTS needs MySQL 8.0.29+ — production dumps can land
+-- on an older 8.0.x build (confirmed: this broke on a freshly pulled
+-- mysql:8.0 image on an Oracle Ampere/arm64 host), so check
+-- information_schema and only run the ALTER conditionally instead, which
+-- works on any MySQL 5.7+/8.0.x and MariaDB.
+SET @active_exists = (
+  SELECT COUNT(*) FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms' AND column_name = 'active'
+);
+SET @sql = IF(@active_exists = 0,
+  'ALTER TABLE `x2_web_forms` ADD COLUMN `active` tinyint(1) NOT NULL DEFAULT ''1''',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @deactivate_exists = (
+  SELECT COUNT(*) FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms' AND column_name = 'deactivateAt'
+);
+SET @sql = IF(@deactivate_exists = 0,
+  'ALTER TABLE `x2_web_forms` ADD COLUMN `deactivateAt` bigint DEFAULT NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ---------------------------------------------------------------------
 -- 3. Guest (unauthenticated) RBAC entries this stack added, so the public
