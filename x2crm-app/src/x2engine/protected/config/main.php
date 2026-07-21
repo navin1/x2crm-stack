@@ -123,6 +123,7 @@ $config = array(
     'import' => array(
         'application.components.behaviors.ApplicationConfigBehavior',
         'application.components.X2UrlRule',
+        'application.components.X2UrlManager',
         'application.components.ThemeGenerator.ThemeGenerator',
         'application.components.formatters.*'
     ),
