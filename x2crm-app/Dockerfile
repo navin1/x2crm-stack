@@ -33,6 +33,17 @@ WORKDIR /var/www/html
 # Apache would end up serving the wrong directory.
 COPY src/x2engine/ /var/www/html/
 
+# protected/runtime (Yii's cache/log/state directory) and assets (its
+# published-asset cache) are both gitignored on purpose — they're runtime
+# state, not source — which means a fresh `git clone` never creates them
+# at all. Normally X2CRM's own install wizard creates these as part of
+# installing; a deployment that skips the wizard entirely (e.g.
+# migrate-from-prod.sh, seeding from an already-existing production
+# database instead of installing fresh) never gets that chance, and Yii
+# throws a fatal CException ("Application runtime path ... is not valid")
+# the moment anything needs them instead of just creating them itself.
+RUN mkdir -p /var/www/html/protected/runtime /var/www/html/assets
+
 RUN chown -R www-data:www-data /var/www/html \
     && find /var/www/html -type d -exec chmod 755 {} \; \
     && find /var/www/html -type f -exec chmod 644 {} \;
