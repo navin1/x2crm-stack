@@ -12,7 +12,24 @@ set -euo pipefail
 
 echo "==> Installing Docker Engine + Compose plugin..."
 curl -fsSL https://get.docker.com | sh
-usermod -aG docker "${SUDO_USER:-$USER}" || true
+
+# "${SUDO_USER:-$USER}" doesn't reliably resolve to the real login user when
+# this runs the way it's actually documented above to be used: pasted into
+# cloud-init/user-data. cloud-init executes as root with no SUDO_USER set
+# (that's only populated when a command is invoked via `sudo` from an
+# interactive login shell) and $USER resolving to root or nothing in that
+# minimal execution context — so this silently added the docker group to
+# the wrong account (or no-op'd) on every cloud this script targets, and
+# the trailing `|| true` swallowed the failure with no indication anything
+# was wrong. All four clouds named above default to a login user named
+# "ubuntu" on their official Canonical Ubuntu images, so add that
+# explicitly too, in addition to still handling $SUDO_USER for the case of
+# someone running this by hand via sudo under a different account.
+for candidate in "${SUDO_USER:-}" ubuntu; do
+  if [ -n "$candidate" ] && id "$candidate" >/dev/null 2>&1; then
+    usermod -aG docker "$candidate" || true
+  fi
+done
 
 echo "==> Installing git and awscli (for backup/restore scripts)..."
 apt-get update -y
