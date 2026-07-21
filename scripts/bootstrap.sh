@@ -10,8 +10,26 @@
 
 set -euo pipefail
 
+# Works whether this runs as root (always true under cloud-init, which is
+# the primary documented usage above) or as a regular sudo-capable user
+# running it manually via `bash bootstrap.sh`/`scp`+run without an
+# enclosing `sudo` (also explicitly documented above as supported) — every
+# privileged command below is prefixed with $SUDO, which resolves to
+# nothing if already root (no redundant/no-op sudo call) or "sudo"
+# otherwise. Previously these commands ran bare: fine under cloud-init,
+# but silently failed (masked by `|| true` on the ones that had it, hard
+# errors on the ones that didn't) when run manually as a non-root user —
+# `curl ... | sh` happened to still work in that case since Docker's own
+# install script self-elevates internally, misleadingly suggesting the
+# whole script had succeeded when usermod/apt-get/ufw had actually just
+# silently done nothing.
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+  SUDO="sudo"
+fi
+
 echo "==> Installing Docker Engine + Compose plugin..."
-curl -fsSL https://get.docker.com | sh
+curl -fsSL https://get.docker.com | $SUDO sh
 
 # "${SUDO_USER:-$USER}" doesn't reliably resolve to the real login user when
 # this runs the way it's actually documented above to be used: pasted into
@@ -27,20 +45,20 @@ curl -fsSL https://get.docker.com | sh
 # someone running this by hand via sudo under a different account.
 for candidate in "${SUDO_USER:-}" ubuntu; do
   if [ -n "$candidate" ] && id "$candidate" >/dev/null 2>&1; then
-    usermod -aG docker "$candidate" || true
+    $SUDO usermod -aG docker "$candidate" || true
   fi
 done
 
 echo "==> Installing git and awscli (for backup/restore scripts)..."
-apt-get update -y
-apt-get install -y git awscli
+$SUDO apt-get update -y
+$SUDO apt-get install -y git awscli
 
 echo "==> Opening firewall for HTTP/HTTPS/CRM ports (ufw, if present)..."
 if command -v ufw >/dev/null 2>&1; then
-  ufw allow 22/tcp || true
-  ufw allow 80/tcp || true
-  ufw allow 443/tcp || true
-  ufw allow 8080/tcp || true
+  $SUDO ufw allow 22/tcp || true
+  $SUDO ufw allow 80/tcp || true
+  $SUDO ufw allow 443/tcp || true
+  $SUDO ufw allow 8080/tcp || true
 fi
 
 cat <<'EOF'
