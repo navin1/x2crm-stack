@@ -60,6 +60,25 @@ docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scr
 echo "==> Building and starting the rest of the stack..."
 docker compose up -d --build
 
+echo "==> Removing X2CRM's installer files..."
+# index.php's ENTIRE "does this need installing" check is just
+# file_exists('install.php') in the webroot — it has nothing to do with
+# whether the database actually has data. Since the image is built fresh
+# from source on every deploy, install.php is always present after a
+# build, and clicking through it against this already-populated (migrated)
+# database would be destructive: every core table (x2_contacts, x2_users,
+# x2_admin, x2_settings, etc.) gets DROP TABLE + recreated with no
+# existence/data check at all, exactly like a normal successful install
+# already deletes these same files from itself at the end of the wizard —
+# we're just doing that cleanup up front instead, since this script's
+# whole point is that installation (in the form of a real, existing
+# database) already happened on the old server.
+docker exec x2crm_app rm -f \
+  /var/www/html/install.php \
+  /var/www/html/installConfig.php \
+  /var/www/html/initialize.php \
+  /var/www/html/initialize_pro.php
+
 cat <<'EOF'
 
 ==> Database migration complete. Two things still need doing by hand:
