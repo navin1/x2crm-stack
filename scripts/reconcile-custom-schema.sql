@@ -196,3 +196,57 @@ INSERT IGNORE INTO `x2_auth_item_child` (`parent`, `child`) VALUES
 -- ---------------------------------------------------------------------
 
 TRUNCATE TABLE `x2_auth_cache`;
+
+-- ---------------------------------------------------------------------
+-- 5. Convert legacy utf8mb3 tables to utf8mb4 — a dump sourced from an
+--    older MySQL 5.7 server (common; phpMyAdmin/cPanel-hosted production
+--    instances are frequently still on 5.7) carries the legacy
+--    utf8mb3_general_ci collation on every stock table. MySQL 8's regex
+--    engine (used by REGEXP_LIKE, which X2CRM's own search/filtering
+--    relies on) flatly rejects mixing that collation with a
+--    binary-collated value — a real error hit on a live migration:
+--    "Character set 'utf8mb3_general_ci' cannot be used in conjunction
+--    with 'binary' in call to regexp_like". Converts every legacy table
+--    found (no-op if none — e.g. already on utf8mb4, or a fresh
+--    non-migrated install), with FK checks off for the whole batch since
+--    converting tables one at a time otherwise trips FK collation
+--    mismatches against not-yet-converted related tables.
+-- ---------------------------------------------------------------------
+
+SET FOREIGN_KEY_CHECKS=0;
+
+DELIMITER $$
+DROP PROCEDURE IF EXISTS convert_legacy_charset_tables$$
+CREATE PROCEDURE convert_legacy_charset_tables()
+BEGIN
+  DECLARE done INT DEFAULT FALSE;
+  DECLARE tbl VARCHAR(255);
+  DECLARE cur CURSOR FOR
+    SELECT table_name FROM information_schema.tables
+    WHERE table_schema = DATABASE() AND table_collation = 'utf8mb3_general_ci';
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+  OPEN cur;
+  read_loop: LOOP
+    FETCH cur INTO tbl;
+    IF done THEN
+      LEAVE read_loop;
+    END IF;
+    SET @sql = CONCAT('ALTER TABLE `', tbl, '` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+    PREPARE stmt FROM @sql;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END LOOP;
+  CLOSE cur;
+END$$
+DELIMITER ;
+
+CALL convert_legacy_charset_tables();
+DROP PROCEDURE convert_legacy_charset_tables;
+
+SET @dbname_sql = CONCAT('ALTER DATABASE `', DATABASE(), '` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
+PREPARE stmt FROM @dbname_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET FOREIGN_KEY_CHECKS=1;
