@@ -401,3 +401,19 @@ WHERE NOT EXISTS (SELECT 1 FROM x2_modules WHERE name = 'whatsappGroups');
 INSERT INTO x2_modules (name, title, visible, menuPosition, searchable, toggleable, adminOnly, editable, custom, enableRecordAliasing, linkOpenInNewTab, linkOpenInFrame, moduleType)
 SELECT 'mailerlite', 'MailerLite', 1, 91, 0, 0, 0, 1, 1, 0, 0, 0, 'module'
 WHERE NOT EXISTS (SELECT 1 FROM x2_modules WHERE name = 'mailerlite');
+
+-- ---------------------------------------------------------------------
+-- 9. Enable X2CRM's REST API — this production system's own data has it
+--    switched off (x2_admin.api2 -> "enabled":"0"), inherited from the
+--    original server, not something migration itself breaks. Without
+--    this, every call integration/server.js makes back into X2CRM
+--    (creating/updating Contacts, logging Actions for the MailerLite
+--    webhook, /sync/new-lead, /trigger/mailerlite-email) fails with a
+--    503 "API access has been disabled on this system" — confirmed live,
+--    and easy to mistake for the separate X2CRM_API_KEY/userKey mismatch
+--    (that one's a 401, this is a 503). JSON_SET only touches the
+--    `enabled` key, leaving every other api2 setting (rate limits,
+--    lockout policy, IP allow/deny lists) exactly as production had it.
+-- ---------------------------------------------------------------------
+
+UPDATE x2_admin SET api2 = JSON_SET(api2, '$.enabled', '1') WHERE api2 IS NOT NULL;
