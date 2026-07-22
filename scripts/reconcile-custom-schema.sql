@@ -366,3 +366,23 @@ VALUES
 -- ---------------------------------------------------------------------
 
 DELETE FROM x2_modules WHERE name = 'x2Activity';
+
+-- ---------------------------------------------------------------------
+-- 8. Register this stack's own custom modules (whatsappGroups, mailerlite)
+--    in x2_modules — a production dump can NEVER have these already,
+--    since they don't exist on any server except this one. X2CRM's route
+--    resolution checks x2_modules to decide which modules are actually
+--    routable, not just which show up in the nav menu: without this,
+--    visiting /index.php/whatsappGroups (or /mailerlite) 404s with
+--    "Unable to resolve the request", confirmed live. x2_modules has no
+--    unique constraint on `name`, so INSERT IGNORE can't be used for
+--    idempotency here — using INSERT...SELECT...WHERE NOT EXISTS instead.
+-- ---------------------------------------------------------------------
+
+INSERT INTO x2_modules (name, title, visible, menuPosition, searchable, toggleable, adminOnly, editable, custom, enableRecordAliasing, linkOpenInNewTab, linkOpenInFrame, moduleType)
+SELECT 'whatsappGroups', 'WhatsApp Groups', 1, 90, 0, 0, 0, 1, 1, 0, 0, 0, 'module'
+WHERE NOT EXISTS (SELECT 1 FROM x2_modules WHERE name = 'whatsappGroups');
+
+INSERT INTO x2_modules (name, title, visible, menuPosition, searchable, toggleable, adminOnly, editable, custom, enableRecordAliasing, linkOpenInNewTab, linkOpenInFrame, moduleType)
+SELECT 'mailerlite', 'MailerLite', 1, 91, 0, 0, 0, 1, 1, 0, 0, 0, 'module'
+WHERE NOT EXISTS (SELECT 1 FROM x2_modules WHERE name = 'mailerlite');
