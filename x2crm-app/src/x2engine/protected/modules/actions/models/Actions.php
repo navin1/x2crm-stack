@@ -1344,8 +1344,12 @@ class Actions extends X2Model {
             $criteria = $this->getAccessCriteria();
             $criteria->addCondition(
                 '(type = "" OR type IS NULL)');
+            // Plain REGEXP, not "REGEXP BINARY" — see X2PermissionsBehavior::
+            // getAssignedToCondition() for why (MySQL 8's regexp_like()
+            // rejects BINARY against any non-BINARY-type column regardless
+            // of collation).
             $criteria->addCondition(
-                "assignedTo REGEXP BINARY :userNameRegex AND complete!='Yes' AND ".
+                "assignedTo REGEXP :userNameRegex AND complete!='Yes' AND ".
                 "IFNULL(dueDate, createDate) <= '".strtotime('today 11:59 PM')."'");
             $criteria->params = array_merge($criteria->params,array (
                 ':userNameRegex' => $this->getUserNameRegex ()

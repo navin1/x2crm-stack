@@ -2294,8 +2294,17 @@ abstract class X2Model extends X2ActiveRecord {
                     $assignmentParamName = CDbCriteria::PARAM_PREFIX . CDbCriteria::$paramCount;
                     $criteria->params[$assignmentParamName] = $assignmentRegex;
                     CDbCriteria::$paramCount++;
+                    // Plain REGEXP, not "REGEXP BINARY" — MySQL 8's regexp_like()
+                    // flatly rejects the BINARY keyword against any column with
+                    // a normal (non-BINARY-type) charset/collation, regardless
+                    // of which collation it is (_ci, _bin, all rejected alike;
+                    // confirmed empirically). No column-level fix exists short
+                    // of an actual BINARY/VARBINARY column type, which would
+                    // break ordinary string comparisons elsewhere — dropping
+                    // BINARY here just means this match is case-insensitive
+                    // instead of case-sensitive.
                     $criteria->addCondition(
-                            't.' . $fieldName . ' REGEXP BINARY ' . $assignmentParamName);
+                            't.' . $fieldName . ' REGEXP ' . $assignmentParamName);
                 } else {
                     $assignmentCriteria->compare(
                             't.' . $fieldName, $assignmentVal, true);
@@ -2316,8 +2325,10 @@ abstract class X2Model extends X2ActiveRecord {
                         $dropdownParamName = CDbCriteria::PARAM_PREFIX . CDbCriteria::$paramCount;
                         $criteria->params[$dropdownParamName] = $dropdownRegex;
                         CDbCriteria::$paramCount++;
+                        // See the REGEXP (not "REGEXP BINARY") comment above —
+                        // same MySQL 8 incompatibility, same fix.
                         $criteria->addCondition(
-                                't.' . $fieldName . ' REGEXP BINARY ' . $dropdownParamName);
+                                't.' . $fieldName . ' REGEXP ' . $dropdownParamName);
                     }
                 } else {
                     $criteria->compare('t.' . $fieldName, $dropdownVal, false);

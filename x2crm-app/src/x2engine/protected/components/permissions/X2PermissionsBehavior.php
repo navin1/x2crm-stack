@@ -308,8 +308,8 @@ class X2PermissionsBehavior extends ModelPermissionsBehavior {
                     $ret[] = array(
                         'condition' =>
                         "(" . $prefix . "$visibilityAttr=" . self::VISIBILITY_GROUPS . ' ' .
-                        "AND " . $prefix . "$assignmentAttr 
-                                REGEXP BINARY :" . $paramsNamespace . "groupmatesRegex)",
+                        "AND " . $prefix . "$assignmentAttr
+                                REGEXP :" . $paramsNamespace . "groupmatesRegex)",
                         'operator' => 'OR',
                         'params' => array(
                             ':' . $paramsNamespace . 'groupmatesRegex' => $groupmatesRegex
@@ -332,7 +332,7 @@ class X2PermissionsBehavior extends ModelPermissionsBehavior {
                 $groupRegex = self::getGroupIdRegex();
                 if ($assignmentAttr && !empty($groupRegex)) {
                     $ret[] = array(
-                        'condition' => "(" . $prefix . "$assignmentAttr REGEXP BINARY 
+                        'condition' => "(" . $prefix . "$assignmentAttr REGEXP
                             :" . $paramsNamespace . "visibilityGroupIdRegex)",
                         'operator' => 'OR',
                         'params' => array(
@@ -505,16 +505,26 @@ class X2PermissionsBehavior extends ModelPermissionsBehavior {
         $username = $username === null ? Yii::app()->getSuName() : $username;
         $prefix = empty($alias) ? '' : "$alias.";
         $groupIdsRegex = self::getGroupIdRegex($username);
+        // Plain REGEXP, not "REGEXP BINARY" — MySQL 8's regexp_like() flatly
+        // rejects the BINARY keyword against any column with a normal
+        // (non-BINARY-type) charset/collation, regardless of which
+        // collation it is (_ci, _bin, all rejected alike; confirmed
+        // empirically against a real deployment — "Character set ...
+        // cannot be used in conjunction with 'binary' in call to
+        // regexp_like"). No column-level fix exists short of an actual
+        // BINARY/VARBINARY column type, which would break ordinary string
+        // comparisons elsewhere. Dropping BINARY just means this match is
+        // case-insensitive instead of case-sensitive.
         $condition = "(" . ($includeAnyone ?
                         ($prefix . $this->assignmentAttr . "='Anyone' OR assignedTo='' OR ") : '') .
                 $prefix . $this->assignmentAttr .
-                " REGEXP BINARY :" . $paramsNamespace . "userNameRegex";
+                " REGEXP :" . $paramsNamespace . "userNameRegex";
         $params = array(
             ':' . $paramsNamespace . 'userNameRegex' => self::getUserNameRegex($username),
         );
         if ($groupIdsRegex !== '') {
             $condition .= " OR $prefix" . $this->assignmentAttr .
-                    " REGEXP BINARY :" . $paramsNamespace . "groupIdsRegex";
+                    " REGEXP :" . $paramsNamespace . "groupIdsRegex";
             $params[':' . $paramsNamespace . 'groupIdsRegex'] = $groupIdsRegex;
         }
         $condition .= ')';
