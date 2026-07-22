@@ -413,6 +413,35 @@ rather keep backups on the same cloud, with no code changes needed since
   this project — the same fix (forcing `FOREIGN_KEY_CHECKS=0` for the
   load) is already built into both scripts, so if you still hit this,
   make sure you're running the current version of the script.
+- **Migration "succeeds" (no errors) but the database looks empty
+  afterward, or a re-run fails with "table already exists":** check
+  `SHOW DATABASES;` for an unexpected extra database (e.g. named after
+  your old host, like `dbs123456`). phpMyAdmin exports embed their own
+  `CREATE DATABASE`/`USE` statements naming the *original* database —
+  older copies of `migrate-from-prod.sh`/`verify-prod-dump.sh` didn't
+  strip these, so the entire dump would load successfully with zero
+  errors, just silently into that database instead of `x2crm`. Both
+  scripts strip these automatically now; if you still hit this, you're
+  running a stale copy — `git pull` first.
+- **`bootstrap.sh` seems to run fine (Docker installs) but the `docker`
+  group never actually gets added:** if you ran it manually (`bash
+  bootstrap.sh`) rather than via cloud-init, make sure you didn't run it
+  *without* `sudo` on an older copy of the script — `curl ... | sh`
+  self-elevates on its own regardless, which can make a completely
+  no-op'd script look like it worked. Current version handles both cases
+  automatically; `git pull` if unsure.
+- **Everything is configured correctly (Security List, no NSG, route
+  table has an Internet Gateway route, IGW enabled, OS firewall open,
+  Caddy/Docker confirmed listening on 0.0.0.0) and the site still isn't
+  reachable from outside, on *any* port including one you just opened**
+  (while SSH on 22 works fine): this points to something at the Oracle
+  account/tenancy level rather than anything fixable through VM/network
+  config. Confirm independently with a third-party checker
+  (https://canyouseeme.org/) from a machine/network you haven't already
+  tested from, and if it's still blocked, file an Oracle support ticket —
+  this is a real, reproducible failure mode we hit across two separate
+  fresh instances with every layer of config verified correct, not a
+  one-off local network fluke.
 
 ---
 
