@@ -73,18 +73,15 @@ grep -v -E '^(CREATE DATABASE|USE \`)' "$DUMP_FILE" \
 echo "==> Layering this stack's custom schema on top..."
 docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scripts/reconcile-custom-schema.sql
 
-echo "==> Removing orphaned module registrations for modules not present in this codebase..."
+echo "==> Removing orphaned module registrations not present in this codebase..."
 # A production dump can register x2_modules rows for commercial/third-party
 # X2Engine add-ons (Workshop, Event Organizer, Email Unsubscribe management,
-# etc.) that aren't part of this open-source deployment's code at all. Hit
-# live: X2Model::getModelTypes() iterates every x2_modules row trying to
-# instantiate a matching model class, crashing the Profile dashboard (and
-# anywhere else that enumerates model types, e.g. the Contacts grid's "Add
-# Relationship" action) the moment it reaches one with no corresponding PHP
-# module. We have zero source for these, so they can't be made functional
-# here — removing the registration just makes this deployment look like a
-# fresh install where that add-on was never purchased/installed, which is
-# also functionally true.
+# etc.) that aren't part of this open-source deployment's code at all. These
+# drive the main nav menu — an orphaned entry there means clicking it 404s/
+# 500s trying to route to a controller that doesn't exist. We have zero
+# source for these, so they can't be made functional here; removing the
+# registration just makes this deployment look like a fresh install where
+# that add-on was never purchased, which is also functionally true.
 ORPHANED_MODULES=$(docker exec x2crm_db mysql -uroot -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" -N -e "SELECT name FROM x2_modules;" 2>/dev/null | while read -r mod; do
   # A DB module name doesn't always exactly match its directory name (e.g.
   # "templates" in the DB is the "template" directory) — check both the
@@ -98,6 +95,25 @@ if [ -n "$ORPHANED_MODULES" ]; then
   echo "    Removing orphaned modules: $(echo "$ORPHANED_MODULES" | tr '\n' ' ')"
   IN_CLAUSE=$(echo "$ORPHANED_MODULES" | sed "s/.*/'&'/" | paste -sd, -)
   docker exec x2crm_db mysql -uroot -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" -e "DELETE FROM x2_modules WHERE name IN ($IN_CLAUSE);"
+fi
+
+echo "==> Removing orphaned x2_fields metadata for models with no matching class..."
+# The actual cause of a real 500 hit live ("Class: Emailunsubscribe not
+# found") — X2Model::getModelTypes() (used to build things like the
+# Contacts grid's "Add Relationship" dropdown and Profile dashboard
+# widgets) queries `SELECT DISTINCT modelName FROM x2_fields`, NOT
+# x2_modules — so cleaning x2_modules alone (above) does not fix this.
+# Same root cause as above (commercial add-ons with no corresponding code
+# here), different table X2CRM actually reads for this specific purpose.
+ORPHANED_MODELS=$(docker exec x2crm_db mysql -uroot -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" -N -e "SELECT DISTINCT modelName FROM x2_fields WHERE modelName != 'Calendar';" 2>/dev/null | while read -r model; do
+  if [ -z "$(find x2crm-app/src/x2engine/protected -iname "${model}.php" -path "*/models/*" 2>/dev/null | head -1)" ]; then
+    echo "$model"
+  fi
+done)
+if [ -n "$ORPHANED_MODELS" ]; then
+  echo "    Removing orphaned field metadata for: $(echo "$ORPHANED_MODELS" | tr '\n' ' ')"
+  IN_CLAUSE=$(echo "$ORPHANED_MODELS" | sed "s/.*/'&'/" | paste -sd, -)
+  docker exec x2crm_db mysql -uroot -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" -e "DELETE FROM x2_fields WHERE modelName IN ($IN_CLAUSE);"
 fi
 
 echo "==> Building and starting the rest of the stack..."

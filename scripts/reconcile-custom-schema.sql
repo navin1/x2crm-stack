@@ -351,14 +351,17 @@ VALUES
 --    stock x2_modules row ships in EVERY X2Engine 7.1 install, including
 --    a completely fresh one (confirmed against a from-scratch local dev
 --    database with no migrated data at all), with no corresponding PHP
---    module anywhere in the codebase. X2Model::getModelTypes() iterates
---    every x2_modules row trying to instantiate a matching model class
---    to build things like the Contacts grid's "Add Relationship" dropdown
---    or Profile dashboard widgets, and crashes outright the moment it
---    reaches this one ("Class: X2activity not found"). Since this
+--    module anywhere in the codebase. x2_modules drives the main nav
+--    menu, so clicking this entry there 404s/500s trying to route to a
+--    controller that doesn't exist. Note this is a *different* crash
+--    path than the x2_fields-based one migrate-from-prod.sh handles
+--    dynamically for commercial-addon leftovers (X2Model::getModelTypes(),
+--    used by e.g. the Contacts grid's "Add Relationship" dropdown, reads
+--    DISTINCT modelName from x2_fields, not x2_modules at all — confirmed
+--    x2Activity was never registered there, only here). Since this
 --    reconcile script only ever runs for a migrated deployment (a fresh
---    local install just eats this bug silently until something happens
---    to trigger it), fixing it here too rather than leaving it to be
+--    local install just eats this bug silently until someone clicks that
+--    menu item), fixing it here too rather than leaving it to be
 --    rediscovered independently on every future migration.
 -- ---------------------------------------------------------------------
 
