@@ -8,7 +8,16 @@
 #   Production: crm.yourcompany.com (NO "http://" prefix) → this is what
 #               triggers real, trusted Let's Encrypt HTTPS.
 
-{$CRM_DOMAIN:http://localhost}, http://127.0.0.1 {
+{$CRM_DOMAIN:http://localhost}, http://127.0.0.1, :80 {
+	# The bare ":80" catch-all above matches any Host header on plain HTTP
+	# — needed because a server accessed by its raw public IP before DNS
+	# is pointed at it (or ever, if you just prefer IP access) sends that
+	# IP address as the Host header, which doesn't match "localhost" or
+	# 127.0.0.1 and would otherwise fall through to nothing (a bare 200
+	# with no body — confirmed on a real deployment). Doesn't interfere
+	# with automatic HTTPS once CRM_DOMAIN holds a real domain — Caddy's
+	# cert provisioning is driven by that specific hostname entry, not by
+	# this unrelated HTTP-only wildcard.
 	# Integration middleware — only these specific paths are exposed
 	# publicly (MailerLite's webhook needs to reach this from the internet;
 	# everything else on the middleware stays internal). Every one of these
