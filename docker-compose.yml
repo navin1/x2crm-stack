@@ -3,12 +3,24 @@ services:
     # mysql:5.7 has no arm64 build (breaks on Apple Silicon Macs and on
     # ARM-based cloud VMs like AWS Graviton/Oracle Ampere). mysql:8.0
     # ships for both amd64 and arm64, so the exact same compose file
-    # works everywhere without emulation. The command flag below makes
-    # it accept connections the way X2CRM's PHP 7.4 mysqli/pdo_mysql
-    # drivers expect — MySQL 8's new default auth method otherwise
-    # isn't supported by older PHP database extensions.
+    # works everywhere without emulation. --default-authentication-plugin
+    # makes it accept connections the way X2CRM's PHP 7.4 mysqli/pdo_mysql
+    # drivers expect — MySQL 8's new default auth method otherwise isn't
+    # supported by older PHP database extensions.
+    #
+    # --sql-mode drops ONLY_FULL_GROUP_BY from MySQL 8's default sql_mode
+    # (keeping the other, safe defaults). Confirmed live on a real
+    # migration: X2CRM's own stock queries (e.g. the Contacts detail
+    # page's Actions widget) use "loose" GROUP BY — a column in the SELECT
+    # list that's neither aggregated nor in the GROUP BY clause — which
+    # MySQL 5.7 (the original production server here, and evidently
+    # configured without this mode) allows by just returning an arbitrary
+    # matching row's value, but MySQL 8's default sql_mode rejects
+    # outright ("Expression #N of SELECT list is not in GROUP BY clause").
+    # Matching the sql_mode the app was actually built/run against is far
+    # safer than trying to patch every such query in X2CRM's stock code.
     image: mysql:8.0
-    command: --default-authentication-plugin=mysql_native_password
+    command: --default-authentication-plugin=mysql_native_password --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
     container_name: x2crm_db
     restart: unless-stopped
     environment:
