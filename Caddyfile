@@ -7,17 +7,19 @@
 #               automatic HTTPS, so it serves plain HTTP as expected.
 #   Production: crm.yourcompany.com (NO "http://" prefix) → this is what
 #               triggers real, trusted Let's Encrypt HTTPS.
-
-{$CRM_DOMAIN:http://localhost}, http://127.0.0.1, :80 {
-	# The bare ":80" catch-all above matches any Host header on plain HTTP
-	# — needed because a server accessed by its raw public IP before DNS
-	# is pointed at it (or ever, if you just prefer IP access) sends that
-	# IP address as the Host header, which doesn't match "localhost" or
-	# 127.0.0.1 and would otherwise fall through to nothing (a bare 200
-	# with no body — confirmed on a real deployment). Doesn't interfere
-	# with automatic HTTPS once CRM_DOMAIN holds a real domain — Caddy's
-	# cert provisioning is driven by that specific hostname entry, not by
-	# this unrelated HTTP-only wildcard.
+#
+# Split into two site blocks (sharing routes via the snippet below) rather
+# than one combined block: mixing an explicit "http://" address into the
+# same site block as a bare domain suppresses Caddy's automatic HTTP->HTTPS
+# redirect for that domain — the whole block gets treated as "already
+# explicitly handling HTTP," so plain http://crm.yourcompany.com would keep
+# working unencrypted right alongside https://, defeating the point of
+# having a domain at all. Keeping the bare-domain block isolated is what
+# lets Caddy insert its automatic redirect-to-HTTPS for CRM_DOMAIN once it's
+# a real domain, while raw-IP/localhost access (which can never get a
+# Let's Encrypt cert — no CA issues certs for bare IPs) stays plain HTTP in
+# its own block.
+(common_routes) {
 	# Integration middleware — only these specific paths are exposed
 	# publicly (MailerLite's webhook needs to reach this from the internet;
 	# everything else on the middleware stays internal). Every one of these
@@ -77,4 +79,20 @@
 	handle {
 		reverse_proxy x2crm:80
 	}
+}
+
+{$CRM_DOMAIN:http://localhost} {
+	import common_routes
+}
+
+# The bare ":80" catch-all matches any Host header on plain HTTP — needed
+# because a server accessed by its raw public IP before DNS is pointed at
+# it (or ever, if you just prefer IP access) sends that IP address as the
+# Host header, which doesn't match "localhost", "127.0.0.1", or a real
+# CRM_DOMAIN, and would otherwise fall through to nothing (a bare 200 with
+# no body — confirmed on a real deployment). Kept in its own always-plain-
+# HTTP block so it can never suppress the automatic-HTTPS redirect that
+# CRM_DOMAIN gets above once it holds a real domain.
+http://127.0.0.1, :80 {
+	import common_routes
 }

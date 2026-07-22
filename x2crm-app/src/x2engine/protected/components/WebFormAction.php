@@ -115,6 +115,26 @@ class WebFormAction extends CAction {
 
             $model->visibility = 1;
 
+            // This org's Contacts model requires country/state/c_Core_member/
+            // c_Updeshit to be non-blank, but most web lead forms don't collect
+            // them — without a default, validate() below always fails and the
+            // submission silently never saves (confirmed live: 200 OK
+            // returned, form re-displayed, nothing written to x2_contacts).
+            // Only fills in when the visitor/form didn't actually supply a
+            // value, so a form that does collect one of these keeps whatever
+            // was submitted.
+            $webleadFieldDefaults = array(
+                'country' => 'USA',
+                'state' => 'OO',
+                'c_Core_member' => 'N',
+                'c_Updeshit' => 'N',
+            );
+            foreach ($webleadFieldDefaults as $defaultField => $defaultValue) {
+                if ($model->hasAttribute($defaultField) && empty($model->$defaultField)) {
+                    $model->$defaultField = $defaultValue;
+                }
+            }
+
             $model->validate(null, false);
             if (!$model->hasErrors()) {
                 $model->lastUpdated = $now;

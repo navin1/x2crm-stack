@@ -5,7 +5,13 @@ const crypto = require('crypto');
 const mysql = require('mysql2/promise');
 
 const app = express();
-app.use(express.json());
+// The `verify` callback stashes the exact raw bytes Express parsed — needed
+// by verifyMailerliteSignature() below, since an HMAC must be computed over
+// the identical byte sequence MailerLite signed, not a re-serialized copy of
+// the parsed object (whitespace/key-order differences would break it).
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
 
 const {
   PORT = 3000,
@@ -19,6 +25,10 @@ const {
   MAILERLITE_API_KEY: MAILERLITE_API_KEY_ENV,
   NEW_CONTACT_MAILERLITE_GROUP = 'X2CRM - New Contacts',
   INTEGRATION_SHARED_SECRET,
+  // MailerLite's per-webhook signing secret (shown when the webhook is
+  // created/viewed via their API or dashboard) — NOT the same value as
+  // INTEGRATION_SHARED_SECRET. See verifyMailerliteSignature() below.
+  MAILERLITE_WEBHOOK_SECRET,
 } = process.env;
 
 // Small dedicated pool just for integration_settings (the live-editable
@@ -143,6 +153,37 @@ function requireSharedSecret(req, res, next) {
   next();
 }
 
+// Used only by /webhooks/mailerlite, in place of requireSharedSecret.
+// MailerLite HMAC-SHA256-signs the raw JSON body with a secret unique to
+// this webhook and sends the result in a `Signature` header — verifying it
+// confirms a request genuinely came from MailerLite and wasn't tampered
+// with, without needing a static secret embedded in the webhook URL itself.
+// That matters here specifically: a URL-embedded secret is exactly the kind
+// of thing a reverse proxy's error/debug logging can end up persisting in
+// plaintext (confirmed in practice — Caddy's reverse_proxy error handler
+// dumps full request URLs/headers on upstream failures), and unlike an HMAC
+// signature (which is single-use/payload-specific and useless for forging a
+// *different* future payload), a leaked static secret is reusable forever.
+function verifyMailerliteSignature(req, res, next) {
+  if (!MAILERLITE_WEBHOOK_SECRET) {
+    console.warn('integration: MAILERLITE_WEBHOOK_SECRET is not set — rejecting webhook (fail closed)');
+    return res.status(401).json({ ok: false, error: 'webhook signature verification not configured' });
+  }
+  const signature = req.get('Signature') || req.get('signature');
+  if (!signature || !req.rawBody) {
+    return res.status(401).json({ ok: false, error: 'missing signature' });
+  }
+  const expected = crypto.createHmac('sha256', MAILERLITE_WEBHOOK_SECRET)
+    .update(req.rawBody)
+    .digest('hex');
+  const ok = expected.length === signature.length
+    && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  if (!ok) {
+    return res.status(401).json({ ok: false, error: 'invalid signature' });
+  }
+  next();
+}
+
 // X2CRM's API uses HTTP Basic auth: base64(username:apiKey) — not a
 // bearer token. axios's `auth` option handles the encoding for us.
 const x2crmAuth = { username: X2CRM_API_USERNAME, password: X2CRM_API_KEY };
@@ -155,20 +196,38 @@ const x2crmAuth = { username: X2CRM_API_USERNAME, password: X2CRM_API_KEY };
 // There's no built-in "upsert" endpoint, so this does a lookup-by-email/
 // phone first via a filtered GET, then creates or updates accordingly.
 function normalizeX2crmContact(contact) {
-  const firstName = String(contact.firstName || contact.name || '').trim();
-  const lastName = String(contact.lastName || 'Unknown').trim();
   const email = String(contact.email || '').trim();
   const phone = String(contact.phone || '').trim();
   const visibility = contact.visibility ?? 1;
-  const payload = {
-    firstName,
-    lastName,
-    visibility,
-    ...contact,
-  };
+  const payload = { visibility, ...contact };
   if (email) payload.email = email;
   if (phone) payload.phone = phone;
-  if (!payload.name) payload.name = [firstName, lastName].filter(Boolean).join(' ').trim() || email || phone || 'Unknown';
+  // Recomputed AFTER the spread, not folded into the object literal above:
+  // callers like the webhook handler pass an explicit empty string (e.g.
+  // `firstName: subscriberData.fields?.name || ''`), and an explicit ''
+  // from `...contact` would silently override a default placed earlier in
+  // the same literal — this has to win last.
+  // A real-world case, not just a test artifact: MailerLite subscribers who
+  // never filled in a name field have an empty fields.name, and this
+  // Contacts model rejects a blank firstName — fall back to the email's
+  // local part so the contact is at least identifiable.
+  payload.firstName = String(contact.firstName || contact.name || '').trim()
+    || (email ? email.split('@')[0] : 'Unknown');
+  payload.lastName = String(contact.lastName || '').trim() || 'Unknown';
+  // This org's Contacts model requires these four custom fields to be
+  // non-blank (confirmed live — every API-created Contact was failing
+  // validation without them), but nothing calling upsertX2crmContact (the
+  // MailerLite webhook, /sync/new-lead, /trigger/mailerlite-email) has any
+  // of this data to supply. Only fills in when the caller didn't actually
+  // provide a value.
+  if (!String(payload.country || '').trim()) payload.country = 'USA';
+  if (!String(payload.state || '').trim()) payload.state = 'OO';
+  if (!String(payload.c_Core_member || '').trim()) payload.c_Core_member = 'N';
+  if (!String(payload.c_Updeshit || '').trim()) payload.c_Updeshit = 'N';
+  if (!payload.name) {
+    payload.name = [payload.firstName, payload.lastName].filter(Boolean).join(' ').trim()
+      || email || phone || 'Unknown';
+  }
   return payload;
 }
 
@@ -395,7 +454,7 @@ async function getMailerliteCampaignSummary(campaignId) {
 // send off to MailerLite.
 // When batchable:true, MailerLite wraps everything in { events: [...],
 // total: N } instead of posting one flat/nested object per call.
-app.post('/webhooks/mailerlite', requireSharedSecret, async (req, res) => {
+app.post('/webhooks/mailerlite', verifyMailerliteSignature, async (req, res) => {
   try {
     const body = req.body;
     const events = Array.isArray(body?.events) ? body.events
