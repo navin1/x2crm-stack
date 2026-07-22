@@ -375,39 +375,74 @@ async function getMailerliteCampaignSummary(campaignId) {
 // ---------- Routes ----------
 
 // MailerLite webhook: fires on subscriber/campaign/automation activity.
-// Configure this URL under MailerLite > Integrations > Webhooks, and
-// enable the event types you want (subscriber created/updated, campaign
-// sent, link clicked, unsubscribed, etc — MailerLite sends a `type` field
-// identifying which one fired).
+// Configure this URL under MailerLite > Integrations > Webhooks.
+//
+// Payload shape (confirmed against MailerLite's actual docs, not guessed):
+// there is NO "data" wrapper anywhere. Two distinct shapes exist:
+//   - subscriber.* events (unsubscribed, bounced, spam_reported, created,
+//     updated, active, added_to_group, removed_from_group, deleted): a FLAT
+//     object — email/status/etc directly on evt, event name in evt.event.
+//   - campaign.open / campaign.click (the only two with per-recipient
+//     identity — MailerLite requires batchable:true for these): evt.type
+//     names the event, evt.subscriber and evt.campaign are nested objects,
+//     and click adds evt.link_url.
+// campaign.sent is its own third shape: a single aggregate event per
+// campaign (id/name/total_recipients only) with NO subscriber at all — it
+// cannot be attributed to an individual contact here. That per-contact
+// "this was sent to them" log is instead written directly by
+// MailerliteController::actionScheduleCampaign() at schedule time in PHP,
+// since X2CRM already knows the full recipient list before handing the
+// send off to MailerLite.
+// When batchable:true, MailerLite wraps everything in { events: [...],
+// total: N } instead of posting one flat/nested object per call.
 app.post('/webhooks/mailerlite', requireSharedSecret, async (req, res) => {
   try {
-    const events = Array.isArray(req.body) ? req.body : [req.body];
+    const body = req.body;
+    const events = Array.isArray(body?.events) ? body.events
+      : Array.isArray(body) ? body
+      : [body];
+
     for (const evt of events) {
-      const email = evt?.data?.subscriber?.email;
-      if (!email) continue;
+      const eventType = evt.type || evt.event || 'unknown';
+      // campaign.open/click nest subscriber data under evt.subscriber;
+      // every subscriber.* event IS the flat subscriber object itself.
+      const subscriberData = evt.subscriber || evt;
+      const email = subscriberData.email;
+      if (!email) {
+        // Expected for campaign.sent (no recipient identity) — logged so a
+        // real shape mismatch on some other event type is still visible.
+        console.log(`MailerLite webhook: skipping "${eventType}" (no email in payload)`);
+        continue;
+      }
 
       const contactId = await upsertX2crmContact({
         email,
-        firstName: evt?.data?.subscriber?.fields?.name || '',
+        firstName: subscriberData.fields?.name || '',
         source: 'MailerLite',
       });
 
-      const eventType = evt.type || 'subscriber.updated';
-      const campaignId = evt?.data?.campaign?.id;
+      const campaignId = evt.campaign?.id;
       const campaign = campaignId ? await getMailerliteCampaignSummary(campaignId) : null;
 
-      if (eventType.includes('sent') || eventType.includes('campaign.sent')) {
-        // A campaign email actually went out to this contact — log the
-        // real subject + a text preview, not just "campaign sent."
-        const summary = campaign
-          ? `"${campaign.subject}" — ${campaign.preview}`
-          : (evt?.data?.campaign?.name || '(campaign name unavailable)');
-        await logEmailEvent(contactId, 'OUT', summary);
-      } else if (eventType.includes('click')) {
+      if (eventType.includes('click')) {
         const subjectNote = campaign ? ` (from "${campaign.subject}")` : '';
-        await logEmailEvent(contactId, 'IN', `clicked ${evt?.data?.url || 'a link'}${subjectNote}`);
+        await logEmailEvent(contactId, 'IN', `clicked ${evt.link_url || 'a link'}${subjectNote}`);
+      } else if (eventType.includes('open')) {
+        const subjectNote = campaign ? ` "${campaign.subject}"` : '';
+        await logEmailEvent(contactId, 'IN', `opened${subjectNote}`);
+      } else if (eventType.includes('spam')) {
+        await logEmailEvent(contactId, 'IN', 'reported as spam');
+        // A spam complaint is at least as serious as an unsubscribe for
+        // deliverability/compliance purposes — suppress future sends too.
+        await upsertX2crmContact({ email, doNotEmail: true });
       } else if (eventType.includes('bounce')) {
         await logEmailEvent(contactId, 'IN', 'email bounced');
+        // Only MailerLite's own subscriber.status flip (not just any
+        // bounce webhook firing) reliably indicates a hard/permanent
+        // bounce vs. a transient one — gate the suppression on that.
+        if (subscriberData.status === 'bounced') {
+          await upsertX2crmContact({ email, doNotEmail: true });
+        }
       } else if (eventType.includes('unsubscribe')) {
         await logEmailEvent(contactId, 'IN', 'unsubscribed');
         // doNotEmail is the real x2_contacts column (confirmed against this

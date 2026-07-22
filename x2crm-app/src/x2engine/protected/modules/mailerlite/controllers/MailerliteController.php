@@ -200,18 +200,24 @@ class MailerliteController extends x2base {
 
         $contacts = Contacts::model()->findAll($list->queryCriteria());
         $subscribers = array();
+        $contactModels = array();
         foreach ($contacts as $c) {
             if (!empty($c->email)) {
                 $subscribers[] = array(
                     'email' => $c->email,
                     'name' => trim($c->firstName . ' ' . $c->lastName),
                 );
+                $contactModels[] = $c;
             }
         }
         if (empty($subscribers)) {
             throw new CException('No contacts with an email address in this list.');
         }
-        return array($list, $subscribers);
+        // Third element (the actual Contacts models, not just email/name) is
+        // only used by actionScheduleCampaign() so it can log a per-contact
+        // Action without a second query — PHP's list() ignores extra array
+        // elements, so this is safe for every other caller.
+        return array($list, $subscribers, $contactModels);
     }
 
     /**
@@ -387,7 +393,7 @@ class MailerliteController extends x2base {
                     throw new CException('Send date/time must be in the future.');
                 }
 
-                list($list, $subscribers) = $this->resolveListSubscribers(Yii::app()->request->getPost('listId'));
+                list($list, $subscribers, $contactModels) = $this->resolveListSubscribers(Yii::app()->request->getPost('listId'));
 
                 $name = trim(Yii::app()->request->getPost('campaignName'));
                 $subject = trim(Yii::app()->request->getPost('subject'));
@@ -415,6 +421,30 @@ class MailerliteController extends x2base {
 
                 if (empty($result['ok'])) {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Scheduling failed');
+                }
+
+                // MailerLite's campaign.sent webhook is a single aggregate
+                // event per campaign (total_recipients count only) with no
+                // per-subscriber identity at all — it can't tell us which
+                // individual contacts actually received the email. X2CRM
+                // already knows the full recipient list right here, so log
+                // the per-contact record directly instead of depending on a
+                // webhook that structurally can't provide it. A failure
+                // logging one contact's Action shouldn't stop the rest.
+                foreach ($contactModels as $contactModel) {
+                    try {
+                        Actions::associateAction($contactModel, array(
+                            'actionDescription' => '[Email OUT] scheduled: "' . $subject .
+                                '" (MailerLite campaign "' . $name . '", sending ' .
+                                date('M j, Y g:i A', $timestamp) . ')',
+                            'type' => 'Email',
+                        ));
+                    } catch (Exception $e) {
+                        Yii::log(
+                            'Failed to log MailerLite campaign Action for contact ' .
+                                $contactModel->id . ': ' . $e->getMessage(),
+                            CLogger::LEVEL_WARNING, 'application');
+                    }
                 }
 
                 Yii::app()->user->setFlash('success',
