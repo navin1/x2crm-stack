@@ -345,3 +345,21 @@ VALUES
 ('Templates', 'lastUpdated',  'Last Updated',  0, 'dateTime',   0, 1, NULL, 0, 0, '',       0, 1, NULL),
 ('Templates', 'lastActivity', 'Last Activity', 0, 'dateTime',   0, 1, NULL, 0, 0, '',       0, 1, NULL),
 ('Templates', 'updatedBy',    'Updated By',    0, 'assignment', 0, 1, NULL, 0, 0, '',       0, 1, NULL);
+
+-- ---------------------------------------------------------------------
+-- 7. x2Activity: not a migration-specific gap like section 6 above — this
+--    stock x2_modules row ships in EVERY X2Engine 7.1 install, including
+--    a completely fresh one (confirmed against a from-scratch local dev
+--    database with no migrated data at all), with no corresponding PHP
+--    module anywhere in the codebase. X2Model::getModelTypes() iterates
+--    every x2_modules row trying to instantiate a matching model class
+--    to build things like the Contacts grid's "Add Relationship" dropdown
+--    or Profile dashboard widgets, and crashes outright the moment it
+--    reaches this one ("Class: X2activity not found"). Since this
+--    reconcile script only ever runs for a migrated deployment (a fresh
+--    local install just eats this bug silently until something happens
+--    to trigger it), fixing it here too rather than leaving it to be
+--    rediscovered independently on every future migration.
+-- ---------------------------------------------------------------------
+
+DELETE FROM x2_modules WHERE name = 'x2Activity';
