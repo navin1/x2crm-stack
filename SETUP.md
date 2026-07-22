@@ -43,11 +43,13 @@ specifically for this reason — nothing to move or rearrange by hand.
 ```bash
 # 2. Configure
 cp .env.example .env
+chmod 600 .env   # secrets live here — no reason it should be group/world-readable
 # Now edit .env and fill in:
 #   - DB_ROOT_PASSWORD, DB_PASSWORD  → pick real passwords
 #   - leave CRM_DOMAIN=http://localhost for now
 #   - MAILERLITE_API_KEY             → from MailerLite: Integrations > API
 #   - leave X2CRM_API_USERNAME / X2CRM_API_KEY blank for now — you'll fill these in after install (step 4)
+#   - leave MAILERLITE_WEBHOOK_SECRET blank for now — you'll fill this in when you register the webhook (see "Test webhooks locally" below)
 
 # 3. Build and start everything
 make up
@@ -68,8 +70,15 @@ After install, get your API credentials: log in as an admin, go to the
 built-in "API User" account; it only supports a legacy API version.)
 Put your username in `.env` as `X2CRM_API_USERNAME` and the key as
 `X2CRM_API_KEY` — X2CRM uses HTTP Basic auth (username + key), not a
-bearer token. Then restart the integration service so it picks up the
-new credentials:
+bearer token. Under the hood this key IS that user's `x2_users.userKey`
+column value — worth knowing because it means it's tied to that specific
+database's row for that user, not a portable token (see the migration
+troubleshooting entry below for why that matters later). Also confirm
+**Admin > API** has **"Enable API access"** checked — on by default for a
+fresh install, but worth a glance now since a disabled setting here fails
+silently from the integration service's point of view (503, not an auth
+error). Then restart the integration service so it picks up the new
+credentials:
 ```bash
 docker compose restart integration
 ```
@@ -89,11 +98,49 @@ isn't. Use a tunnel for testing:
 ```bash
 ngrok http 3000
 ```
-Then temporarily point MailerLite's webhook setting at the
-`https://xxxx.ngrok.app/webhooks/mailerlite` URL ngrok gives you, trigger
-a MailerLite event, and confirm it shows up as an Action on the contact
-in X2CRM. Switch this back to your real domain once you're on the cloud
-(step 3 below).
+Register the webhook against MailerLite's API directly (simpler and less
+error-prone than the dashboard UI, and gives you the signing secret back
+in the same response) — run this once, from anywhere with `curl` and your
+`MAILERLITE_API_KEY`:
+```bash
+curl -s -X POST https://connect.mailerlite.com/api/webhooks \
+  -H "Authorization: Bearer $MAILERLITE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "X2CRM sync",
+    "url": "https://xxxx.ngrok.app/webhooks/mailerlite",
+    "events": ["campaign.sent", "campaign.open", "campaign.click",
+               "subscriber.unsubscribed", "subscriber.bounced", "subscriber.spam_reported"],
+    "enabled": true,
+    "batchable": true
+  }'
+```
+That event list is the recommended set — `campaign.sent`/`open`/`click`
+for engagement history, `unsubscribed`/`bounced`/`spam_reported` for
+deliverability/compliance (each of the latter three also flips the
+contact's `doNotEmail` flag). `batchable: true` is required by MailerLite
+whenever `campaign.open` or `campaign.click` are included — it changes the
+payload shape for the whole webhook, which the handler already accounts
+for. Only add `subscriber.automation_triggered`/`automation_completed` if
+you're actually using MailerLite Automations (not just one-off campaigns).
+
+The response includes a `"secret"` field — copy that into `.env` as
+`MAILERLITE_WEBHOOK_SECRET` (NOT the same value as
+`INTEGRATION_SHARED_SECRET`; see the comments in `.env.example` for why
+there are two different secrets here) and restart the integration service:
+```bash
+docker compose restart integration
+```
+This secret is what the webhook actually authenticates with now — the
+URL itself carries no secret/query param, specifically so a reverse
+proxy's error logging can't end up persisting one in plaintext.
+
+Trigger a real MailerLite event and confirm it shows up as an Action on
+the matching contact in X2CRM. Repeat the registration call (with the
+real domain's URL) once you're on the cloud (step 4 below) — each
+environment needs its own webhook, since each gets a distinct URL and
+signing secret; `MAILERLITE_WEBHOOK_SECRET` is NOT a value you copy from
+local to production the way most of `.env` is.
 
 ---
 
@@ -128,8 +175,12 @@ On the **new cloud VM**:
 git clone <your-repo-url> x2crm-stack && cd x2crm-stack
 git clone --branch 7.1 --depth 1 https://github.com/X2Engine/X2CRM.git x2crm-app/src
 cp .env.example .env
+chmod 600 .env
 # fill in the same values as local — DB passwords, MailerLite key,
 # X2CRM_API_KEY, BACKUP_S3_BUCKET
+# (MAILERLITE_WEBHOOK_SECRET is the one exception — leave it blank here;
+# you'll register a new webhook for this domain in step 4 below and get a
+# fresh secret specific to it, not a value you carry over from local)
 
 make restore TS=<timestamp-from-backup-step>
 ```
@@ -147,13 +198,24 @@ CRM_DOMAIN=crm.yourcompany.com
 docker compose up -d --build
 ```
 Caddy will automatically request and renew a Let's Encrypt HTTPS
-certificate for that domain — no manual cert setup.
+certificate for that domain — no manual cert setup — and will also
+force-redirect any plain `http://crm.yourcompany.com` request to `https://`
+automatically. Raw-IP access (`http://<vm-ip>`) keeps working over plain
+HTTP alongside this, since no CA will issue a cert for a bare IP address —
+that's expected, not a leftover misconfiguration.
 
 ### 4. Point MailerLite at the real domain
 
-Update the webhook URL in the MailerLite dashboard from your ngrok test
-URL to:
-- MailerLite: `https://crm.yourcompany.com/webhooks/mailerlite`
+Register a new webhook for this domain (or `PUT` your existing
+ngrok-test one to update its URL, `PUT https://connect.mailerlite.com/api/webhooks/<id>` —
+either works, but a fresh registration also gets you a fresh signing
+secret tied to this specific URL). See "Test webhooks locally" above for
+the exact `curl` call and recommended event list — just swap in:
+```
+"url": "https://crm.yourcompany.com/webhooks/mailerlite"
+```
+Then put the `secret` field from the response into this VM's `.env` as
+`MAILERLITE_WEBHOOK_SECRET` and `docker compose restart integration`.
 
 ### 5. Schedule ongoing backups
 On the cloud VM:
@@ -350,7 +412,11 @@ Still in the SSH session:
 ```bash
 git clone <your-repo-url> x2crm-stack && cd x2crm-stack
 cp .env.example .env
+chmod 600 .env
 nano .env   # fill in DB_ROOT_PASSWORD, DB_PASSWORD, MAILERLITE_API_KEY — same values you'd use anywhere
+# leave MAILERLITE_WEBHOOK_SECRET and X2CRM_API_KEY blank — you'll get the
+# real values for THIS deployment after migrating in step 8 below, not
+# from whatever your local .env has (see that step's notes on why)
 ```
 Note there's deliberately no separate `git clone` of upstream X2Engine
 here anymore: once your own repo has ever had customizations committed
@@ -380,6 +446,26 @@ It'll take a while the first time (building 4 images + loading your full
 database) — let it run. Follow the two manual steps it prints at the end:
 copying `protected/uploads` from the old server, and re-pairing WhatsApp
 (its session data isn't part of any DB dump and starts empty on a new VM).
+
+**Then fix up `X2CRM_API_KEY`** — do not assume the value already in
+`.env` (copied from your local dev setup) still works. It won't: X2CRM's
+API auth checks the HTTP Basic Auth password against that specific
+database's `x2_users.userKey` column for the given username, and a
+migrated production database has its own `admin` user with its own
+`userKey`, unrelated to whatever your local install generated. Look it up
+directly and update `.env`:
+```bash
+source .env && docker exec x2crm_db mysql -uroot -p"$DB_ROOT_PASSWORD" x2crm \
+  -e "SELECT username, userKey FROM x2_users WHERE username='admin';"
+# then: nano .env, update X2CRM_API_KEY, then:
+docker compose up -d integration
+```
+Also confirm the API isn't disabled system-wide on the migrated data —
+check `Admin > API > Enable API access` in X2CRM's UI (or
+`SELECT api2 FROM x2_admin;` for `"enabled":"0"` directly). A production
+system that had this off fails every integration call with a 503, which
+looks different from — and is easy to mistake for — the userKey mismatch
+above (that one's a 401).
 
 **Sanity check it's actually reachable** before moving to DNS:
 ```bash
@@ -451,6 +537,34 @@ rather keep backups on the same cloud, with no code changes needed since
   this is a real, reproducible failure mode we hit across two separate
   fresh instances with every layer of config verified correct, not a
   one-off local network fluke.
+- **MailerLite webhook returns 401, or the integration logs show "X2CRM
+  contact create error: 401 ... Invalid user credentials":** `.env`'s
+  `X2CRM_API_KEY` doesn't match this database's actual
+  `x2_users.userKey` for that username — see step 8's "fix up
+  X2CRM_API_KEY" above. Very easy to hit right after any migration, since
+  a leftover local-dev value in `.env` looks valid but silently isn't.
+- **Same, but "X2CRM contact create error: 503 ... API access has been
+  disabled on this system":** different root cause, same symptom family —
+  `Admin > API > Enable API access` is off on this data (common on a
+  migrated production database, not something the migration itself
+  breaks). Turn it on in X2CRM's UI, or directly:
+  `UPDATE x2_admin SET api2 = JSON_SET(api2, '$.enabled', '1');`
+- **A web lead form (or the MailerLite webhook) returns 200/succeeds but
+  no Contact actually appears in X2CRM:** check for custom required
+  fields on the `Contacts` model that neither the web form nor the
+  MailerLite integration collects (this stack's own deployment has four:
+  `country`, `state`, `c_Core_member`, `c_Updeshit` — check yours via
+  `SELECT fieldName FROM x2_fields WHERE modelName='Contacts' AND
+  required=1;`). `$model->validate()`/the API's model validation fails
+  silently in this case — no error surfaces to the visitor or to
+  MailerLite, the record just never saves. Fix by defaulting those fields
+  when blank, in both `WebFormAction.php`'s
+  `handleWebleadFormSubmission()` (for web lead forms) and
+  `server.js`'s `normalizeX2crmContact()` (for the MailerLite webhook and
+  `/sync/new-lead`/`/trigger/mailerlite-email`) — see the existing
+  `$webleadFieldDefaults`/`payload.country` blocks in each for the
+  pattern to extend if your Contacts model has different custom required
+  fields.
 
 ---
 
