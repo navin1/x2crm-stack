@@ -90,7 +90,18 @@ $('#login-form-outer').submit(function(evt) {
     var that = this,
         username = $('#LoginForm_username').val(),
         csrfTokenRegex = /(?:^|.*;)\s*YII_CSRF_TOKEN\s*=\s*([^;]*)(?:.*$|$)/;
-    var csrfToken = document.cookie.replace (csrfTokenRegex, '$1');
+    // document.cookie returns the RAW, still-percent-encoded cookie value
+    // (browsers never decode it) — without decodeURIComponent here, jQuery's
+    // $.ajax re-encodes that already-encoded string when serializing the
+    // POST body, double-encoding the token. Yii's CSRF check only decodes
+    // once, so the double-encoded value never matches and this request
+    // fails with 'The CSRF token could not be verified' (400) — silently,
+    // since only the below error handler runs. Confirmed live: this is why
+    // the first Enter/click on this form intermittently does nothing (only
+    // reproduces when the token happens to contain characters that need
+    // percent-encoding), and a second attempt then works, since the submit
+    // handler is already unbound from the first (failed) attempt.
+    var csrfToken = decodeURIComponent(document.cookie.replace (csrfTokenRegex, '$1'));
 
     $.ajax({
         url: '" . Yii::app()->createUrl('/site/site/needsTwoFactor') . "',
@@ -109,6 +120,17 @@ $('#login-form-outer').submit(function(evt) {
             }
         },
         error: function(data) {
+            // Deliberately NOT falling back to a real submit() here: the
+            // server only enforces 2FA (LoginForm::verifySecondFactor) when
+            // a twoFactorCode value is actually present in the POST at all
+            // it is skipped entirely, not merely rejected, if the field
+            // was never submitted. This pre-check is the only thing that
+            // reveals that field before submission, so treating its
+            // failure as submit-anyway would silently bypass 2FA for any
+            // account that has it enabled, for as long as this check keeps
+            // failing. Fixing the actual cause of failures (see
+            // decodeURIComponent above) is the correct fix, not working
+            // around them here.
             console.log('error checking 2FA requirement');
             $(that).unbind('submit');
         }
