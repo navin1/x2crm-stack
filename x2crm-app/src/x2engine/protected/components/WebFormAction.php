@@ -188,6 +188,38 @@ class WebFormAction extends CAction {
                     $model->assignedTo = $this->controller->getNextAssignee();
                 }
 
+                // If an admin has assigned a pracharak to this specific webFormId
+                // via WhatsApp Groups > Web Form Notifications
+                // (wa_webform_notify), stamp their name onto this Contact's Point
+                // of Contact field here — same name shown in the "Notify
+                // Pracharak" dropdown, applied at submission time so it lands on
+                // the actual Contact record being saved below, not the separate
+                // synthetic Lead row that feature also creates just to trigger
+                // wa-hub's WhatsApp-notification poll. Wrapped defensively: this
+                // is a nice-to-have enhancement on top of the real submission,
+                // and must never be able to break the actual contact save (e.g.
+                // hasAttribute() can report true from x2_fields metadata even
+                // when a deployment's actual x2_contacts table doesn't have this
+                // column — confirmed on a fresh/non-migrated database).
+                if (isset($_GET['webFormId']) && $model->hasAttribute('c_point_of_contact')) {
+                    try {
+                        $pracharakName = Yii::app()->db->createCommand()
+                            ->select('c.name')
+                            ->from('wa_webform_notify n')
+                            ->join('x2_contacts c', 'c.id = n.pracharakId')
+                            ->where('n.webFormId=:id', array(':id' => (int) $_GET['webFormId']))
+                            ->queryScalar();
+                        if ($pracharakName) {
+                            $model->c_point_of_contact = $pracharakName;
+                        }
+                    } catch (Exception $e) {
+                        Yii::log(
+                            'Failed to set Point of Contact from Web Form Notifications: ' .
+                                $e->getMessage(),
+                            CLogger::LEVEL_WARNING, 'application');
+                    }
+                }
+
                 $success = $model->save();
                 $model->scenario = $extractedParams['requireCaptcha'] ? 'webFormWithCaptcha' : 'webForm';
 
