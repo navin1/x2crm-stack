@@ -53,15 +53,22 @@ echo "==> Restoring production dump into ${DB_NAME}..."
 # x2_actions row) that a strict reload would reject even though production
 # itself has been running fine with that data for years.
 #
-# Uses --init-command instead of piping a prepended SET statement through
-# `cat` — confirmed on a real deployment that the `{ echo ...; cat ...; } |
-# docker exec -i` pipe chain can exit 0 with no visible error while
-# actually loading almost nothing (only 9 tables existed afterward, none
-# of them real production tables) — a silent partial failure somewhere in
-# that multi-stage pipe. Redirecting the file directly into mysql's stdin
-# and setting FK checks via a client flag instead removes that whole pipe
-# chain, which is both simpler and avoids whatever was truncating it.
-docker exec -i x2crm_db mysql --init-command="SET FOREIGN_KEY_CHECKS=0" -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < "$DUMP_FILE"
+# Root-caused on a real deployment (cost hours to track down, so leaving
+# this documented in full): phpMyAdmin exports embed their own
+# `CREATE DATABASE IF NOT EXISTS \`<original-db-name>\`;` and
+# `USE \`<original-db-name>\`;` near the top of the file. mysql executes
+# these just like any other statement in the stream, which silently
+# switches every subsequent CREATE TABLE/INSERT to a DIFFERENT database
+# than the one named on the command line — the whole dump loads
+# completely successfully, with no error at all, just into the wrong
+# database. Every symptom we chased (0 tables in x2crm, then "table
+# already exists" on retry) was this, not a truncation/pipe/FK issue.
+# Stripping these two statement types before feeding mysql makes every
+# CREATE TABLE/INSERT apply to whatever database is named on the command
+# line (\$DB_NAME) instead, regardless of what a given dump's own export
+# tool assumed the database was called on the original server.
+grep -v -E '^(CREATE DATABASE|USE \`)' "$DUMP_FILE" \
+  | docker exec -i x2crm_db mysql --init-command="SET FOREIGN_KEY_CHECKS=0" -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}"
 
 echo "==> Layering this stack's custom schema on top..."
 docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scripts/reconcile-custom-schema.sql
