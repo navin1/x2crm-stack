@@ -190,6 +190,21 @@ INSERT IGNORE INTO `x2_auth_item_child` (`parent`, `child`) VALUES
   ('AuthenticatedSiteFunctionsTask', 'MailerliteResolveListMembers'),
   ('GuestSiteFunctionsTask', 'MailerliteResolveListMembers');
 
+-- This production system's own `guest` auth item carries a broken bizrule:
+-- `return Yii::app()->user->isLoggedOut;` — `isLoggedOut` doesn't exist
+-- anywhere on X2WebUser/CWebUser (confirmed via a full-codebase grep); the
+-- correct, stock property is `isGuest`. Since `guest` sits at the root of
+-- every unauthenticated permission check (CDbAuthManager::checkAccessRecursive
+-- evaluates it via eval()), this one bad bizrule throws
+-- `CException: Property "X2WebUser.isLoggedOut" is not defined` and blocks
+-- ALL guest-accessible actions app-wide, including public web-lead-form
+-- submissions — confirmed live on a real migrated production dump. Not a
+-- stock X2Engine bug; this is bad data specific to this org's database, so
+-- fix it here rather than in application code.
+UPDATE `x2_auth_item`
+  SET `bizrule` = 'return Yii::app()->user->isGuest;'
+  WHERE `name` = 'guest' AND `bizrule` = 'return Yii::app()->user->isLoggedOut;';
+
 -- ---------------------------------------------------------------------
 -- 4. Clear any cached RBAC/permission resolution from production's data,
 --    so the two guest items above take effect immediately.
