@@ -244,9 +244,104 @@ DELIMITER ;
 CALL convert_legacy_charset_tables();
 DROP PROCEDURE convert_legacy_charset_tables;
 
-SET @dbname_sql = CONCAT('ALTER DATABASE `', DATABASE(), '` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
-PREPARE stmt FROM @dbname_sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
+-- ALTER DATABASE isn't supported in the prepared-statement protocol at
+-- all (MySQL error 1295: "This command is not supported in the prepared
+-- statement protocol yet"), so unlike the table-name loop above this
+-- can't go through PREPARE/EXECUTE — but it doesn't need to: with no
+-- explicit database name, ALTER DATABASE always applies to whichever
+-- database the current session is connected to, which is already the
+-- right one (this whole script is invoked with a specific db name on
+-- the command line).
+ALTER DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 
 SET FOREIGN_KEY_CHECKS=1;
+
+-- ---------------------------------------------------------------------
+-- 6. Stock X2Engine tables missing entirely from a production dump — not
+--    because of anything wrong with the dump, but because that instance
+--    genuinely never used the corresponding feature (mysqldump only ever
+--    exports tables that exist). Hit live: a CDbException 500
+--    ("table X2_campaigns/x2_templates ... cannot be found") the moment
+--    a page (here, the Profile dashboard) touched a module the org had
+--    never actually used. Compared a fresh install's full table list
+--    (protected/data/*.sql + every module's own install.sql) against a
+--    real migrated production database and found exactly these two
+--    gaps; CREATE TABLE IF NOT EXISTS makes this safe to run regardless
+--    of whether a given production instance already has them.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS x2_campaigns (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    masterId     INT UNSIGNED NULL,
+    name         VARCHAR(250) NOT NULL,
+    nameId       VARCHAR(250) DEFAULT NULL,
+    assignedTo   VARCHAR(50),
+    email        VARCHAR(250),
+    phone        VARCHAR(40),
+    leadstatus   VARCHAR(250),
+    listId       VARCHAR(100),
+    suppressionListId VARCHAR(100),
+    active       TINYINT DEFAULT 1,
+    description  TEXT,
+    type         VARCHAR(100) DEFAULT NULL,
+    cost         VARCHAR(100) DEFAULT NULL,
+    leadSource   VARCHAR(40) DEFAULT NULL,
+    template     VARCHAR(250) DEFAULT '0',
+    subject      VARCHAR(250),
+    content      TEXT,
+    createdBy    VARCHAR(50) NOT NULL,
+    complete     TINYINT DEFAULT 0,
+    visibility   INT NOT NULL,
+    createDate   BIGINT NOT NULL,
+    launchDate   BIGINT,
+    lastUpdated  BIGINT NOT NULL,
+    lastActivity BIGINT,
+    updatedBy    VARCHAR(50),
+    sendAs       INT DEFAULT NULL,
+    bouncedAccount INT DEFAULT NULL,
+    enableRedirectLinks TINYINT DEFAULT 0,
+    enableBounceHandling TINYINT NOT NULL DEFAULT 0,
+    openRate     FLOAT DEFAULT NULL,
+    clickRate    FLOAT DEFAULT NULL,
+    unsubscribeRate FLOAT DEFAULT NULL,
+    category     VARCHAR(250) DEFAULT 'Marketing',
+    categoryListId    VARCHAR(100),
+    parent VARCHAR(250),
+    children VARCHAR(250),
+    PRIMARY KEY (id),
+    UNIQUE (nameId),
+    INDEX(listId),
+    INDEX(suppressionListId),
+    INDEX(template)
+) ENGINE InnoDB COLLATE = utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS x2_templates(
+    id           INT NOT NULL AUTO_INCREMENT primary key,
+    assignedTo   VARCHAR(250),
+    `name`       VARCHAR(250) NOT NULL,
+    nameId       VARCHAR(250) DEFAULT NULL,
+    description  TEXT,
+    createDate   INT,
+    lastUpdated  INT,
+    lastActivity BIGINT,
+    updatedBy    VARCHAR(250),
+    UNIQUE(nameId)
+) COLLATE = utf8mb4_general_ci;
+
+INSERT IGNORE INTO `x2_modules`
+(`name`, title, visible, menuPosition, searchable, editable, adminOnly, custom, toggleable)
+VALUES
+('templates', 'TemplatesTitle', 1, 1, 1, 1, 0, 1, 1);
+
+INSERT IGNORE INTO x2_fields
+(modelName, fieldName, attributeLabel, custom, `type`, required, readOnly, linkType, searchable, isVirtual, relevance, uniqueConstraint, safe, keyType)
+VALUES
+('Templates', 'id',           'ID',            0, 'int',        0, 1, NULL, 0, 0, '',       1, 1, 'PRI'),
+('Templates', 'name',         'Name',          0, 'varchar',    1, 0, NULL, 0, 0, 'High',   0, 1, NULL),
+('Templates', 'nameId',       'NameID',        0, 'varchar',    0, 1, NULL, 0, 0, 'High',   0, 1, 'FIX'),
+('Templates', 'assignedTo',   'Assigned To',   0, 'assignment', 0, 0, NULL, 0, 0, '',       0, 1, NULL),
+('Templates', 'description',  'Description',   0, 'text',       0, 0, NULL, 0, 0, 'Medium', 0, 1, NULL),
+('Templates', 'createDate',   'Create Date',   0, 'dateTime',   0, 1, NULL, 0, 0, '',       0, 1, NULL),
+('Templates', 'lastUpdated',  'Last Updated',  0, 'dateTime',   0, 1, NULL, 0, 0, '',       0, 1, NULL),
+('Templates', 'lastActivity', 'Last Activity', 0, 'dateTime',   0, 1, NULL, 0, 0, '',       0, 1, NULL),
+('Templates', 'updatedBy',    'Updated By',    0, 'assignment', 0, 1, NULL, 0, 0, '',       0, 1, NULL);
