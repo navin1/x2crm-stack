@@ -210,15 +210,17 @@ things matter here that you can't change after the fact:
 Once logged in, the **☰ hamburger menu** (top-left) is how you get
 everywhere in the console — that's referenced below as "☰ →".
 
-### 2. Generate an SSH key pair (on your own machine, not the VM)
+### 2. About SSH keys — nothing to do yet
 
-You're on a Mac, so:
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/oci_x2crm -C "oci-x2crm"
-```
-Press enter through the passphrase prompt (or set one if you prefer).
-This creates `~/.ssh/oci_x2crm` (private key — never share this) and
-`~/.ssh/oci_x2crm.pub` (public key — this is what you paste into OCI).
+You need a key pair to connect to the instance, but there's no separate
+pre-step for it: the instance-creation wizard in step 3 below has its own
+"Generate a key pair for me" option, which is simpler than generating one
+yourself first — it creates the pair and lets you download the private
+key directly from the browser at instance-creation time. That's the path
+this guide uses. (If you already have your own key pair from a previous
+instance, you can instead choose "Paste public key"/"Upload public key
+file" in step 3 and skip generating a new one — either approach works
+identically for everything after this.)
 
 ### 3. Create the compute instance
 
@@ -264,9 +266,15 @@ This creates `~/.ssh/oci_x2crm` (private key — never share this) and
 - **Boot volume:** under "Boot volume" → expand from the default (~47GB)
   to around 100GB. Always Free includes 200GB total block storage, and
   this leaves room to spare.
-- **SSH keys:** choose "Upload public key file" and select
-  `~/.ssh/oci_x2crm.pub` from step 2 (or paste its contents — `cat
-  ~/.ssh/oci_x2crm.pub` to view it).
+- **SSH keys:** under "Add SSH keys", leave **"Generate a key pair for
+  me"** selected (the default) — then click **"Download private key"**
+  (and "Download public key" too, for reference, though you won't need it
+  again). Save the private key somewhere sensible, e.g. into `~/Downloads/`
+  or move it to `~/.ssh/` — either is fine, you'll reference the exact
+  path when connecting. Lock down its permissions once downloaded:
+  ```bash
+  chmod 400 ~/Downloads/oci_x2crm_key   # or wherever you saved it
+  ```
 - **Networking:** leave it on the default "Create new virtual cloud
   network" — it auto-creates a VCN with an internet gateway, a public
   subnet, and a default Security List, which is everything you need for a
@@ -282,9 +290,10 @@ Click **Create**. The instance takes a minute or two to reach the
 ### 4. Find its address and connect
 
 On the instance's details page, copy the **Public IP Address** shown
-there. Connect to it:
+there. Connect to it, using the private key path from wherever you saved
+the downloaded key in step 3:
 ```bash
-ssh -i ~/.ssh/oci_x2crm ubuntu@<public-ip>
+ssh -i ~/Downloads/oci_x2crm_key ubuntu@<public-ip>
 ```
 The username is `ubuntu` specifically because you picked a Canonical
 Ubuntu image (Oracle Linux images instead use `opc`). Type `yes` if asked
@@ -358,7 +367,7 @@ to take effect) or prefix commands with `sudo` for this session.
 
 From your **local machine** (a second terminal, not the SSH session):
 ```bash
-scp -i ~/.ssh/oci_x2crm prod_full_dump.sql ubuntu@<reserved-ip>:~/x2crm-stack/
+scp -i ~/Downloads/oci_x2crm_key prod_full_dump.sql ubuntu@<reserved-ip>:~/x2crm-stack/
 ```
 
 Back in the SSH session on the VM:
@@ -396,8 +405,8 @@ rather keep backups on the same cloud, with no code changes needed since
 
 - **Can't SSH in at all:** check port 22 is in the Security List (step 6a),
   and that your key file has the right permissions: `chmod 400
-  ~/.ssh/oci_x2crm`. Also double check you copied the *reserved* IP from
-  step 5, not a stale ephemeral one.
+  ~/Downloads/oci_x2crm_key` (or wherever you saved it). Also double check
+  you copied the *reserved* IP from step 5, not a stale ephemeral one.
 - **Site works from the VM (`curl localhost`) but not from outside:**
   you're missing step 6b — the VM's own `iptables` is still blocking it
   even though the Security List allows it.
