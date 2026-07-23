@@ -500,6 +500,12 @@ rather keep backups on the same cloud, with no code changes needed since
   all 5 containers are `Up`; `docker compose logs caddy` if `caddy` isn't.
 - **`docker: permission denied`:** log out of SSH and back in once (group
   membership needs a fresh login), or prefix with `sudo` in the meantime.
+- **`bootstrap.sh` fails on `apt-get install -y git awscli` with "Package
+  'awscli' has no installation candidate":** Ubuntu 24.04 ("noble") dropped
+  the `awscli` apt package entirely — confirmed live. Current version of
+  the script installs git and awscli separately (awscli via AWS's own
+  official installer, not apt) specifically so this can't take git down
+  with it; if you hit this, `git pull` for the current version.
 - **"Out of host capacity" creating the instance:** covered in step 3 —
   try a different Availability Domain, or retry later. Very common on the
   free Ampere shape specifically, not an error in what you did.
