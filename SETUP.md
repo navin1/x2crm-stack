@@ -204,6 +204,22 @@ automatically. Raw-IP access (`http://<vm-ip>`) keeps working over plain
 HTTP alongside this, since no CA will issue a cert for a bare IP address —
 that's expected, not a leftover misconfiguration.
 
+**If you want `www.crm.yourcompany.com` to work too**, it needs to be
+listed explicitly — Caddy only auto-provisions a certificate for exactly
+the hostname(s) named in `CRM_DOMAIN`, so `www.` doesn't automatically
+inherit the bare domain's cert. Confirmed live: without this, `www.`
+still resolves and serves plain HTTP fine (it falls through to the same
+`:80` catch-all every raw-IP request uses), but HTTPS on `www.` fails
+outright with a TLS handshake error, since Caddy has no certificate to
+present for that hostname. Fix is just a second comma-separated entry —
+Caddy's site addresses already support this, same as the existing
+`, http://127.0.0.1, :80` pattern in the Caddyfile:
+```bash
+CRM_DOMAIN=crm.yourcompany.com, www.crm.yourcompany.com
+```
+No Caddyfile changes needed — just restart Caddy (`docker compose up -d
+caddy`) after setting this, and it requests a second cert automatically.
+
 ### 4. Point MailerLite at the real domain
 
 Register a new webhook for this domain (or `PUT` your existing
