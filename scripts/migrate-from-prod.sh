@@ -15,7 +15,10 @@
 #      WhatsApp Groups / MailerLite sync / iframe-lead-form tables, the
 #      x2_web_forms.active/deactivateAt columns, and the guest-access RBAC
 #      rows for the public lead-form + MailerLite poller endpoints.
-#   4. Build and start the rest of the stack.
+#   4. Apply X2Engine's own official 7.1->8.0 schema migration
+#      (scripts/upgrade-7.1-to-8.0-schema.sql) -- the production dump is
+#      always 7.1-shaped, but this codebase is on 8.5.
+#   5. Build and start the rest of the stack.
 #
 # What this script does NOT do (do these separately — see the printed
 # reminders at the end):
@@ -72,6 +75,16 @@ grep -v -E '^(CREATE DATABASE|USE \`)' "$DUMP_FILE" \
 
 echo "==> Layering this stack's custom schema on top..."
 docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scripts/reconcile-custom-schema.sql
+
+# The production dump this script restores is always 7.1-shaped (it comes
+# from the still-7.1 source system), but this codebase is now on 8.5 --
+# without this, the 8.5 code runs against a database missing the columns/
+# tables/RBAC rows its own official 7.1->8.0 migration expects. Not a
+# one-off step: every future clean-slate migration against this same
+# production system needs both scripts for as long as that version gap
+# exists, exactly like reconcile-custom-schema.sql itself.
+echo "==> Applying X2Engine's own 7.1->8.0 schema migration (this stack is on 8.5, the dump is still 7.1-shaped)..."
+docker exec -i x2crm_db mysql -u root -p"${DB_ROOT_PASSWORD}" "${DB_NAME}" < scripts/upgrade-7.1-to-8.0-schema.sql
 
 echo "==> Removing orphaned module registrations not present in this codebase..."
 # A production dump can register x2_modules rows for commercial/third-party
