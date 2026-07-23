@@ -479,7 +479,17 @@ x2.WebFormDesigner = (function() {
         var iframeHeight = $('#iframe_example').height ();
         params.push ('iframeHeight=' + (Math.floor (iframeHeight)));
 
-        var query = this._generateQuery(params);
+        // Read the currently-selected saved form's id once, right here, and pass it straight
+        // through to _generateQuery instead of letting it re-query '#saved-forms' on its own
+        // later — the dropdown's value should obviously be the same either way, but in
+        // practice the preview iframe was observed loading with webFormId=0 (the "new form"
+        // default) even while this element's real, live DOM value was confirmed correct via
+        // the console at the exact same moment. Whatever the exact cause of that divergence
+        // (another handler, timing, a stale second reference to the element), capturing the
+        // value once here and threading it through explicitly removes the possibility of it
+        // entirely, rather than requiring it to be tracked down.
+        var savedFormId = $('#saved-forms').val();
+        var query = this._generateQuery(params, savedFormId);
 
         var iframeWidth;
         if ($('#iframe_example').find ('iframe').length) {
@@ -491,7 +501,7 @@ x2.WebFormDesigner = (function() {
         /* 
         */
         var embedCode = '<iframe name="web-form-iframe" src="' + that.iframeSrc + query +
-            '" frameborder="0" allowtransparency="true" scrolling="0" width="' + iframeWidth +  '" height="' + 
+            '" frameborder="0" allowtransparency="true" scrolling="auto" width="' + iframeWidth +  '" height="' +
             iframeHeight + '"></iframe>';
     
         if ($('#saved-forms').val() != 0) {
@@ -518,7 +528,7 @@ x2.WebFormDesigner = (function() {
         
         var unsubEmbed = '<iframe name="web-form-iframe" src="' + that.baseUrl +
                 '/index.php/marketing/marketing/unsubWebleadForm' +
-            '" frameborder="0" allowtransparency="true" scrolling="0" width="' +
+            '" frameborder="0" allowtransparency="true" scrolling="auto" width="' +
             unsubWidth +  '" height="' + unsubHeight + '"></iframe>';
         
         $('#unsubembedcode').val(unsubEmbed);
@@ -531,7 +541,7 @@ x2.WebFormDesigner = (function() {
     /*
     Generates a GET parameter string from the given paramaters array
     */
-    WebFormDesigner.prototype._generateQuery = function (params) {
+    WebFormDesigner.prototype._generateQuery = function (params, savedFormId) {
         var query = '';
         var first = true;
 
@@ -547,10 +557,11 @@ x2.WebFormDesigner = (function() {
             }
         }
 
-         
-        // add web form id to GET params so that fields can be retrieved
-        query += '&webFormId=' + encodeURIComponent($('#saved-forms').val());
-        
+
+        // add web form id to GET params so that fields can be retrieved — uses the id the
+        // caller already read off '#saved-forms', rather than re-querying it here
+        query += '&webFormId=' + encodeURIComponent(savedFormId);
+
 
         query = this._appendToQuery (query);
 

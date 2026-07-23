@@ -79,7 +79,7 @@ x2.WebleadFormDesignerPro = (function(){
         }
 
         query += 'css=' + encodeURIComponent($('#custom-css').val());
-        query += 'redirectUrl=' + encodeURIComponent($('#redirect-url').val());
+        query += '&redirectUrl=' + encodeURIComponent($('#redirect-url').val());
         return query;
     };
 
