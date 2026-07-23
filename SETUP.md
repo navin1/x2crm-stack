@@ -215,8 +215,16 @@ present for that hostname. Fix is just a second comma-separated entry —
 Caddy's site addresses already support this, same as the existing
 `, http://127.0.0.1, :80` pattern in the Caddyfile:
 ```bash
-CRM_DOMAIN=crm.yourcompany.com, www.crm.yourcompany.com
+CRM_DOMAIN="crm.yourcompany.com, www.crm.yourcompany.com"
 ```
+Quote it — confirmed live: an unquoted comma-separated value here parses
+fine for Docker Compose's own env-file reader, but breaks if anyone later
+runs `source .env` directly in a shell (a common shorthand this project
+uses for one-off `docker exec`/`mysql` commands) — bash treats the text
+after the comma as a second, separate command to run, throwing a
+confusing "command not found" error. Quoting avoids this without
+affecting how Docker Compose reads the value either way.
+
 No Caddyfile changes needed — just restart Caddy (`docker compose up -d
 caddy`) after setting this, and it requests a second cert automatically.
 
