@@ -49,9 +49,32 @@ for candidate in "${SUDO_USER:-}" ubuntu; do
   fi
 done
 
-echo "==> Installing git and awscli (for backup/restore scripts)..."
+echo "==> Installing git..."
 $SUDO apt-get update -y
-$SUDO apt-get install -y git awscli
+$SUDO apt-get install -y git
+
+# Separate from git deliberately: Ubuntu 24.04 ("noble") dropped the
+# `awscli` apt package entirely (confirmed live -- "no installation
+# candidate"), and the two used to be installed in one atomic command,
+# which under `set -e` meant a missing awscli silently took git down with
+# it too, even though git is essential for the deploy and awscli is only
+# needed later for scripts/backup.sh / restore.sh. Using AWS's own official
+# installer instead of the apt package sidesteps this class of breakage
+# entirely -- it's the same install method regardless of Ubuntu version,
+# not dependent on whatever a given release's apt repos currently carry.
+echo "==> Installing awscli (for backup/restore scripts)..."
+if ! command -v aws >/dev/null 2>&1; then
+  TMP_AWSCLI_DIR="$(mktemp -d)"
+  ARCH="$(uname -m)"
+  if curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o "$TMP_AWSCLI_DIR/awscliv2.zip"; then
+    $SUDO apt-get install -y unzip >/dev/null 2>&1 || true
+    unzip -q "$TMP_AWSCLI_DIR/awscliv2.zip" -d "$TMP_AWSCLI_DIR"
+    $SUDO "$TMP_AWSCLI_DIR/aws/install"
+  else
+    echo "    (awscli install failed -- not fatal, only needed later for backup/restore scripts)"
+  fi
+  rm -rf "$TMP_AWSCLI_DIR"
+fi
 
 echo "==> Opening firewall for HTTP/HTTPS/CRM ports (ufw, if present)..."
 if command -v ufw >/dev/null 2>&1; then
