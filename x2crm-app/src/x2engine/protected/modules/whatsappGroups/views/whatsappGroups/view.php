@@ -80,6 +80,23 @@
                 </div>
 
                 <div class="form-group">
+                    <?php $notifyForm = $this->beginWidget('CActiveForm', array('action' => array('toggleNotifyNewLead'), 'method' => 'POST')); ?>
+                        <input type="hidden" name="groupId" value="<?php echo CHtml::encode($groupId); ?>">
+                        <input type="hidden" name="enabled" value="<?php echo $group['notifyOnNewLead'] ? '0' : '1'; ?>">
+                        <?php if ($group['notifyOnNewLead']): ?>
+                            <span class="label label-success">New-lead notifications: ON</span>
+                            &nbsp;
+                            <?php echo CHtml::submitButton('Turn off', array('class' => 'btn btn-sm btn-default')); ?>
+                        <?php else: ?>
+                            <span class="label label-default">New-lead notifications: OFF</span>
+                            &nbsp;
+                            <?php echo CHtml::submitButton('Turn on', array('class' => 'btn btn-sm btn-default')); ?>
+                        <?php endif; ?>
+                        <p class="help-block" style="margin: 6px 0 0;">When on, every new lead notification (the same one sent to the assigned pracharak) is also posted into this group, from the WhatsApp number paired to this app. Requires that number to already be a member of this group.</p>
+                    <?php $this->endWidget(); ?>
+                </div>
+
+                <div class="form-group">
                     <?php $renameForm = $this->beginWidget('CActiveForm', array('action' => array('rename'), 'method' => 'POST')); ?>
                         <input type="hidden" name="groupId" value="<?php echo CHtml::encode($groupId); ?>">
                         <label for="renameGroupName" style="font-weight: normal;">Rename group:</label>

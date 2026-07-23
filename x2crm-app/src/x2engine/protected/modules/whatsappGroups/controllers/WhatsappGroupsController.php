@@ -238,6 +238,89 @@ class WhatsappGroupsController extends x2base {
     }
 
     /**
+     * Toggle whether a group receives the "new lead created" broadcast
+     * (a courtesy copy of the same pracharak-assignment notification,
+     * posted into the group instead of/in addition to the personal DM).
+     * The message always originates from wa-hub's single paired WhatsApp
+     * number — there's no separate sender identity to configure — the
+     * only real prerequisite is that account already being a member of
+     * this group.
+     */
+    public function actionToggleNotifyNewLead() {
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+
+        $groupId = Yii::app()->request->getPost('groupId');
+        $enabled = Yii::app()->request->getPost('enabled');
+
+        try {
+            $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/notify-new-lead', array('enabled' => (bool) $enabled));
+            if (isset($result['ok']) && $result['ok']) {
+                Yii::app()->user->setFlash('success', $enabled ? 'New-lead notifications enabled for this group.' : 'New-lead notifications disabled for this group.');
+            } else {
+                throw new CException(isset($result['error']) ? $result['error'] : 'Failed to update notification setting');
+            }
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect(array('view', 'groupId' => $groupId));
+    }
+
+    /**
+     * Admin-only editor for the new-lead WhatsApp group broadcast's wording
+     * (see wa-hub's renderLeadNotifyTemplate()). Does not affect the
+     * personal DM the assigned pracharak already gets — only the courtesy
+     * copy posted into whichever group(s) have notifications toggled on.
+     */
+    public function actionEditNotifyTemplate() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+
+        try {
+            $result = $this->callWaHub('GET', '/admin/lead-notify-template');
+            $template = isset($result['template']) ? $result['template'] : '';
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', 'Error loading template: ' . $e->getMessage());
+            $template = '';
+        }
+
+        $this->render('notifyTemplate', array('template' => $template));
+    }
+
+    /**
+     * Saves the new-lead group broadcast wording.
+     */
+    public function actionSaveNotifyTemplate() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+
+        $template = Yii::app()->request->getPost('template', '');
+
+        try {
+            if (trim($template) === '') {
+                throw new CException('Template cannot be empty');
+            }
+            $result = $this->callWaHub('POST', '/admin/lead-notify-template', array('template' => $template));
+            if (isset($result['ok']) && $result['ok']) {
+                Yii::app()->user->setFlash('success', 'New-lead message template updated.');
+            } else {
+                throw new CException(isset($result['error']) ? $result['error'] : 'Failed to save template');
+            }
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect(array('editNotifyTemplate'));
+    }
+
+    /**
      * Sync groups from WhatsApp
      */
     public function actionSync() {

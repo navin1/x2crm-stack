@@ -250,7 +250,7 @@ async function notifyAdminNewForm({ name, url }) {
 // actually (successfully) notified — a send failure stops the loop without
 // moving the watermark, so the failed lead gets retried next poll instead of
 // silently skipped.
-async function notifyNewLeadsSince({ leadSource, phone, formLabel, since, logParams = {} }) {
+async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel, since, logParams = {} }) {
   let watermark = since;
   const [leads] = await dbPool.execute(
     'SELECT firstName, lastName, email, phone, company, title, backgroundInfo, createDate ' +
@@ -259,17 +259,17 @@ async function notifyNewLeadsSince({ leadSource, phone, formLabel, since, logPar
   );
 
   for (const lead of leads) {
-    const lines = [`New prospect from "${formLabel}":`, ''];
+    const bodyLines = [];
     const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-    if (fullName) lines.push(`Name: ${fullName}`);
-    if (lead.email) lines.push(`Email: ${lead.email}`);
-    if (lead.phone) lines.push(`Phone: ${lead.phone}`);
-    if (lead.company) lines.push(`Company: ${lead.company}`);
-    if (lead.title) lines.push(`Title: ${lead.title}`);
-    if (lead.backgroundInfo) lines.push(`Message: ${lead.backgroundInfo}`);
+    if (fullName) bodyLines.push(`Name: ${fullName}`);
+    if (lead.email) bodyLines.push(`Email: ${lead.email}`);
+    if (lead.phone) bodyLines.push(`Phone: ${lead.phone}`);
+    if (lead.company) bodyLines.push(`Company: ${lead.company}`);
+    if (lead.title) bodyLines.push(`Title: ${lead.title}`);
+    if (lead.backgroundInfo) bodyLines.push(`Message: ${lead.backgroundInfo}`);
 
     try {
-      await sendWhatsAppMessage(phone, { text: lines.join('\n') });
+      await sendWhatsAppMessage(phone, { text: [`New prospect from "${formLabel}":`, '', ...bodyLines].join('\n') });
       await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: true });
       watermark = lead.createDate;
     } catch (e) {
@@ -277,9 +277,98 @@ async function notifyNewLeadsSince({ leadSource, phone, formLabel, since, logPar
       await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: false, error: e.message });
       break;
     }
+
+    // Best-effort courtesy copy into any WhatsApp group(s) flagged for new-
+    // lead broadcasts — deliberately isolated in its own try/catch so a
+    // failure here (e.g. the bot got removed from the group) never blocks
+    // or retries the lead itself; the pracharak DM above is the primary,
+    // required notification and already advanced the watermark. Unlike the
+    // DM text above, this one goes through the user-editable template
+    // (renderLeadNotifyTemplate) since this is the copy the user asked to
+    // be able to customize the wording/format of.
+    try {
+      const groupText = await renderLeadNotifyTemplate({
+        formLabel,
+        pracharak: pracharakName || '',
+        name: fullName,
+        email: lead.email || '',
+        phone: lead.phone || '',
+        company: lead.company || '',
+        title: lead.title || '',
+        message: lead.backgroundInfo || '',
+      });
+      await notifyGroupsOfNewLead({ text: groupText });
+    } catch (e) {
+      console.warn('wa-hub: group new-lead broadcast failed:', e.message || e);
+    }
   }
 
   return watermark;
+}
+
+// Default wording for the group broadcast, seeded into
+// wa_lead_notify_template on first run — same fields as the pracharak DM
+// above, just user-editable from here on (WhatsApp Groups > Edit New-Lead
+// Message in X2CRM). Each "Label: {{placeholder}}" line is dropped
+// entirely by renderLeadNotifyTemplate when that placeholder is empty, so
+// optional fields don't show up as blank lines.
+const DEFAULT_LEAD_NOTIFY_TEMPLATE = [
+  'New lead from "{{formLabel}}":',
+  'Assigned to: {{pracharak}}',
+  '',
+  'Name: {{name}}',
+  'Email: {{email}}',
+  'Phone: {{phone}}',
+  'Company: {{company}}',
+  'Title: {{title}}',
+  'Message: {{message}}',
+].join('\n');
+
+// Substitutes {{placeholder}} tokens in the saved template with the given
+// field values, then drops any resulting "Label: " line left with nothing
+// after the colon (i.e. its only placeholder was empty) — so an admin can
+// freely include optional fields in their template without every lead that
+// lacks, say, a company name showing a dangling blank "Company: " line.
+// Deliberately not a full templating engine (no conditionals/loops): this
+// single substitute-then-prune-empty-lines pass covers the one thing that
+// actually needed handling here.
+async function renderLeadNotifyTemplate(fields) {
+  const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
+  const template = (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE;
+
+  const substituted = template.replace(/\{\{(\w+)\}\}/g, (_match, key) =>
+    Object.prototype.hasOwnProperty.call(fields, key) ? String(fields[key]) : ''
+  );
+
+  return substituted
+    .split('\n')
+    // A line is "empty" once its WhatsApp formatting markers (*bold*,
+    // _italic_, ~strikethrough~) are ignored — e.g. "*Company:* " (bold
+    // label, blank value) must drop the same as a plain "Company: " would,
+    // otherwise every admin who bolds their labels (which is the one
+    // formatting option WhatsApp actually supports, and the one this
+    // feature explicitly recommends) gets dangling bold-empty lines.
+    .filter((line) => !/^\s*[^:\n]+:\s*$/.test(line.replace(/[*_~]/g, '')))
+    .join('\n');
+}
+
+// Posts a message into every WhatsApp group flagged with notifyOnNewLead=1
+// (see the wa_groups.notifyOnNewLead migration above). Sent directly via
+// the group's own JID (wa_groups.groupId, e.g. "1234567890-1234@g.us") —
+// unlike sendWhatsAppMessage, no phone-number cleaning applies since this
+// is never an individual contact. The message is unavoidably sent from
+// the single WhatsApp number paired to this wa-hub session: Baileys
+// maintains exactly one authenticated identity per session, so there is no
+// way for a group post (or a DM) to originate from any other number. The
+// bot's account must already be a member of a target group to post into
+// it — automatic for groups created via createWhatsAppGroup(), a manual
+// one-time add otherwise.
+async function notifyGroupsOfNewLead({ text }) {
+  if (!sock || !isOpen || !dbPool) return;
+  const [groups] = await dbPool.execute('SELECT groupId FROM wa_groups WHERE notifyOnNewLead = 1');
+  for (const g of groups) {
+    await sock.sendMessage(g.groupId, { text });
+  }
 }
 
 // Polls for prospects who've submitted through a pracharak's personal
@@ -323,7 +412,8 @@ async function pollForNewProspects() {
       if (!pr) continue; // contact gone, removed from the list, or has no phone — nothing to notify
 
       const watermark = await notifyNewLeadsSince({
-        leadSource, phone: pr.phone, formLabel: form.name, since, logParams: { formId: form.id },
+        leadSource, phone: pr.phone, pracharakName: [pr.firstName, pr.lastName].filter(Boolean).join(' ') || null,
+        formLabel: form.name, since, logParams: { formId: form.id },
       });
 
       if (watermark !== since) {
@@ -350,7 +440,7 @@ async function pollForNewWebFormLeads() {
   if (!sock || !isOpen) return;
   try {
     const [rows] = await dbPool.execute(
-      `SELECT n.webFormId, n.lastPolledAt, f.name AS formName, f.leadSource, c.phone
+      `SELECT n.webFormId, n.lastPolledAt, f.name AS formName, f.leadSource, c.phone, c.firstName, c.lastName
        FROM wa_webform_notify n
        JOIN x2_web_forms f ON f.id = n.webFormId
        JOIN x2_contacts c ON c.id = n.pracharakId
@@ -360,8 +450,8 @@ async function pollForNewWebFormLeads() {
     for (const row of rows) {
       const since = row.lastPolledAt || 0;
       const watermark = await notifyNewLeadsSince({
-        leadSource: row.leadSource, phone: row.phone, formLabel: row.formName, since,
-        logParams: { webFormId: row.webFormId },
+        leadSource: row.leadSource, phone: row.phone, pracharakName: [row.firstName, row.lastName].filter(Boolean).join(' ') || null,
+        formLabel: row.formName, since, logParams: { webFormId: row.webFormId },
       });
 
       if (watermark !== since) {
@@ -685,6 +775,31 @@ async function initDb() {
     if (!listIdCol[0] || listIdCol[0].cnt === 0) {
       await dbPool.execute('ALTER TABLE wa_groups ADD COLUMN listId INT NULL');
     }
+    // migrate: add notifyOnNewLead to pre-existing wa_groups tables — flags
+    // a group as a destination for the "new lead created" broadcast (see
+    // notifyGroupsOfNewLead()), independent of any list-sync membership.
+    const [notifyCol] = await dbPool.execute(
+      "SELECT COUNT(*) as cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'wa_groups' AND COLUMN_NAME = 'notifyOnNewLead'",
+      [DB_NAME]
+    );
+    if (!notifyCol[0] || notifyCol[0].cnt === 0) {
+      await dbPool.execute('ALTER TABLE wa_groups ADD COLUMN notifyOnNewLead TINYINT(1) NOT NULL DEFAULT 0');
+    }
+    // Single-row table holding the editable wording for the new-lead group
+    // broadcast (see renderLeadNotifyTemplate()) — a fixed id=1 row rather
+    // than a general key/value settings table, since this is the only
+    // setting of this kind so far.
+    await dbPool.execute(`
+      CREATE TABLE IF NOT EXISTS wa_lead_notify_template (
+        id TINYINT PRIMARY KEY,
+        template TEXT NOT NULL,
+        updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    await dbPool.execute(
+      'INSERT IGNORE INTO wa_lead_notify_template (id, template) VALUES (1, ?)',
+      [DEFAULT_LEAD_NOTIFY_TEMPLATE]
+    );
     // create whatsapp group members table
     await dbPool.execute(`
       CREATE TABLE IF NOT EXISTS wa_group_members (
@@ -1066,7 +1181,7 @@ app.delete('/admin/users/:username', requireAdmin, adminLimiter, async (req, res
 // GET /admin/groups - List all WhatsApp groups
 app.get('/admin/groups', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, createdAt, lastSyncedAt FROM wa_groups ORDER BY createdAt DESC');
+    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, notifyOnNewLead, createdAt, lastSyncedAt FROM wa_groups ORDER BY createdAt DESC');
     
     // Get member counts
     const groupsWithCounts = await Promise.all(groups.map(async (g) => {
@@ -1083,7 +1198,7 @@ app.get('/admin/groups', requireAdmin, adminLimiter, async (req, res) => {
 // GET /admin/groups/:groupId - Get group details with members
 app.get('/admin/groups/:groupId', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [groupRows] = await dbPool.execute('SELECT id, groupId, groupName, subject, isSynced, listId, createdAt, lastSyncedAt FROM wa_groups WHERE groupId = ? LIMIT 1', [req.params.groupId]);
+    const [groupRows] = await dbPool.execute('SELECT id, groupId, groupName, subject, isSynced, listId, notifyOnNewLead, createdAt, lastSyncedAt FROM wa_groups WHERE groupId = ? LIMIT 1', [req.params.groupId]);
     if (!groupRows || !groupRows[0]) return res.status(404).json({ error: 'group not found' });
     
     const group = groupRows[0];
@@ -1115,6 +1230,45 @@ app.post('/admin/groups/:groupId/link-list', requireAdmin, adminLimiter, async (
     await dbPool.execute('UPDATE wa_groups SET listId = ? WHERE groupId = ?', [listId || null, req.params.groupId]);
     await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'link_list', params: { groupId: req.params.groupId, listId }, success: true });
     res.json({ ok: true, listId: listId || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /admin/groups/:groupId/notify-new-lead - Toggle whether this group
+// receives the "new lead created" broadcast (see notifyGroupsOfNewLead())
+app.post('/admin/groups/:groupId/notify-new-lead', requireAdmin, adminLimiter, async (req, res) => {
+  const enabled = !!(req.body || {}).enabled;
+  try {
+    await dbPool.execute('UPDATE wa_groups SET notifyOnNewLead = ? WHERE groupId = ?', [enabled ? 1 : 0, req.params.groupId]);
+    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'toggle_notify_new_lead', params: { groupId: req.params.groupId, enabled }, success: true });
+    res.json({ ok: true, notifyOnNewLead: enabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// GET /admin/lead-notify-template - Current wording for the new-lead group
+// broadcast (see renderLeadNotifyTemplate())
+app.get('/admin/lead-notify-template', requireAdmin, adminLimiter, async (req, res) => {
+  try {
+    const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
+    res.json({ template: (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /admin/lead-notify-template - Save new wording for the new-lead group
+// broadcast
+app.post('/admin/lead-notify-template', requireAdmin, adminLimiter, async (req, res) => {
+  const template = ((req.body || {}).template || '').trim();
+  if (!template) return res.status(400).json({ error: 'template is required' });
+
+  try {
+    await dbPool.execute('UPDATE wa_lead_notify_template SET template = ? WHERE id = 1', [template]);
+    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'update_lead_notify_template', params: {}, success: true });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

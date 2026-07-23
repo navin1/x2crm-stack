@@ -53,6 +53,7 @@
         <div class="btn-group" style="margin-bottom: 15px;">
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
             <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
+            <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate')); ?>
         </div>
 
         <?php if (!empty($groups)): ?>
