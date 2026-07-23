@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -33,6 +33,8 @@
  * technical reasons, the Appropriate Legal Notices must display the words
  * "Powered by X2 Engine".
  **********************************************************************************/
+
+
 
 
 
@@ -278,10 +280,32 @@ class X2CalDavClient extends Client {
         $body.= '    <d:getetag/>' . "\n";
         $body.= '  </d:prop>' . "\n";
 
-        
+
         if($time != NULL){
-            $body.= '<C:filter><C:time-range start="' . date("Y") . (date('M') - 6 + $time) . '00T000000Z"' . 
-                    ' end="' . date("Y") . (date('M') - 5 + $time) . '00T000000Z"/> </C:filter>' . "\n";
+            //need to account for next year and last year
+            $year = date("y");
+            $mon = date('m') - 6 + intval($time);
+            if($mon < 1){
+                $year--;
+                $mon = $mon + 12;
+            }
+            if($mon > 12){
+                $year++;
+                $mon = $mon - 12;
+            }
+            
+            $body.= '<C:filter><C:time-range start="' . $year . $mon . '00T000000Z"' ; 
+            $mon++;
+            if($mon < 1){
+                $year--;
+                $mon = $mon + 12;
+            }
+            if($mon > 12){
+                $year++;
+                $mon = $mon - 12;
+            }
+            
+            $body.=  ' end="' . $year . $mon . '00T000000Z"/> </C:filter>' . "\n";
         }
         $body.= '</d:sync-collection>';
         $headers = array(

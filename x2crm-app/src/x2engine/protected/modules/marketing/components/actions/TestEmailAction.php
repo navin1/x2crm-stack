@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -37,6 +37,8 @@
 
 
 
+
+
 /**
  * Simulates campaign email delivery 
  */
@@ -57,7 +59,7 @@ class TestEmailAction extends CAction {
 
 	public function run(){
             
-        if (Yii::app()->user->isGuest) {
+        if (Yii::app()->user->isLoggedOut) {
             Yii::app()->controller->redirect(Yii::app()->controller->createUrl('/site/login'));
         }
 
@@ -77,7 +79,10 @@ class TestEmailAction extends CAction {
         $sendStatus = array_fill_keys(array('code','message'),'');
         $failed = false;
         if ($model->validate ()) {
-            $model->campaign->content = $model->message;
+            //fix for ckedit 
+            $unsubText = "<br/>\n-----------------------<br/>\n".
+                Yii::t('marketing', 'To stop receiving these messages, click here').": {_unsub}";
+            $model->campaign->content = $model->message . $unsubText;
             $model->campaign->sendAs = $model->credId;
             $this->asa ('CampaignMailingBehavior')->setCampaign ($model->campaign);
             
@@ -97,7 +102,7 @@ class TestEmailAction extends CAction {
         
             
             list($subject,$message,$uniqueId) = 
-                self::prepareEmail ($model->campaign, $model->getTargetModel ());
+                self::prepareEmail ($model->campaign, $model->getTargetModel (), true, true, true);
 
             $this->deliverEmail ($model->mailingList, $model->subject, $message);
             $sendStatus['code'] = $this->asa ('CampaignMailingBehavior')->status['code'];

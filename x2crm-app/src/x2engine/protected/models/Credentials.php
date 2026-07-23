@@ -2,7 +2,7 @@
 
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -38,6 +38,8 @@
 
 
 
+
+
 /**
  * Model implementing encrypted, generic credentials storage.
  *
@@ -62,6 +64,8 @@
  * @package application.models
  * @author Demitri Morgan <demitri@x2engine.com>
  */
+require_once(Yii::app()->basePath.'/components/vendor/autoload.php');
+require_once(Yii::app()->basePath.'/components/LaminasMail/vendor/autoload.php');
 class Credentials extends CActiveRecord {
 
     /**
@@ -137,11 +141,13 @@ class Credentials extends CActiveRecord {
     protected $validModels = array(
         'EmailAccount',
         'GMailAccount',
+        'GMailAccountOauth2',
         'MandrillAccount',
         'MailjetAccount',
         'MailgunAccount',
         'Office365EmailAccount',
         'OutlookEmailAccount',
+        'OutlookEmailAccountOauth2',
         'SendgridAccount',
         'SESAccount',
         'YahooEmailAccount',
@@ -152,6 +158,7 @@ class Credentials extends CActiveRecord {
         'DropboxAccount',
         'TwitterApp',
         'GoogleProject',
+        
         'OutlookProject',
         'JasperServer',
         'X2HubConnector',
@@ -174,6 +181,8 @@ class Credentials extends CActiveRecord {
     protected static $imapModels = array(
         'EmailAccount',
         'GMailAccount',
+        'GMailAccountOauth2',
+        'OutlookEmailAccountOauth2',
         'Office365EmailAccount',
         'OutlookEmailAccount',
         'YahooEmailAccount',
@@ -220,7 +229,9 @@ class Credentials extends CActiveRecord {
 
     public function afterSave() {
         if ($this->modelClass &&
-                in_array($this->modelClass, array('TwitterApp', 'GoogleProject', 'OutlookProject', 'JasperServer', 'X2HubConnector'))) {
+                in_array($this->modelClass, array('TwitterApp', 'GoogleProject', 
+                
+                'OutlookProject', 'JasperServer', 'X2HubConnector'))) {
 
             $modelClass = $this->modelClass;
             $prop = $modelClass::getAdminProperty();
@@ -293,6 +304,7 @@ class Credentials extends CActiveRecord {
                 self::$_authModels[$class] = new $class;
             }
         }
+
         return self::$_authModels;
     }
 
@@ -337,6 +349,8 @@ class Credentials extends CActiveRecord {
             'email' => array(
                 'EmailAccount',
                 'GMailAccount',
+                'GMailAccountOauth2',
+                'OutlookEmailAccountOauth2',
                 'MandrillAccount',
                 'MailjetAccount',
                 'MailgunAccount',
@@ -359,9 +373,11 @@ class Credentials extends CActiveRecord {
             'googleProject' => array(
                 'GoogleProject'
             ),
+            
             'outlookProject' => array(
                 'OutlookProject'
             ),
+            
             'jasperServer' => array(
                 'JasperServer'
             ),
@@ -380,11 +396,13 @@ class Credentials extends CActiveRecord {
         return array(
             'EmailAccount' => array('email'),
             'GMailAccount' => array('email'),
+            'GMailAccountOauth2' => array('email'),
             'MandrillAccount' => array('email'),
             'MailjetAccount' => array('email'),
             'MailgunAccount' => array('email'),
             'Office365EmailAccount' => array('email'),
             'OutlookEmailAccount' => array('email'),
+            'OutlookEmailAccountOauth2' => array('email'),
             'SendgridAccount' => array('email'),
             'SESAccount' => array('email'),
             'YahooEmailAccount' => array('email'),
@@ -395,7 +413,9 @@ class Credentials extends CActiveRecord {
             'LinkedInAccount' => array('linkedIn'),
             'DropboxAccount' => array('dropbox'),
             'GoogleProject' => array('googleProject'),
+            'SlackProject' => array('slackProject'),
             'OutlookProject' => array('outlookProject'),
+            
             'JasperServer' => array('jasperServer'),
             'X2HubConnector' => array('x2HubConnector'),
         );
@@ -484,6 +504,7 @@ class Credentials extends CActiveRecord {
             'dropbox' => Yii::t('app', 'Dropbox App'),
             'linkedIn' => Yii::t('app', 'LinkedIn App'),
             'googleProject' => Yii::t('app', 'Google Project'),
+            
             'outlookProject' => Yii::t('app', 'Outlook Project'),
             'jasperServer' => Yii::t('app', 'Jasper Server'),
             'doc' => Yii::t('app', 'Document Account'),
@@ -589,6 +610,7 @@ class Credentials extends CActiveRecord {
           field is being used: */
         $criteria->addInCondition('modelClass', $staticModel->defaultSubstitutes[$type]);
         $credRecords = $staticModel->findAll($criteria);
+
         $credentials = array();
         if ($model === null || $model->$name == null) {
             // Figure out which one is default since it hasn't been set yet
@@ -605,6 +627,7 @@ class Credentials extends CActiveRecord {
             // Use the one previously set
             $selectedCredentials = $model->$name;
         }
+
         // Compose options for the selector
         foreach ($credRecords as $cred) {
             if ($imapOnly && $type == 'email' && $cred->auth->disableInbox) {
@@ -732,5 +755,41 @@ class Credentials extends CActiveRecord {
     public function tableName() {
         return 'x2_credentials';
     }
+
+    
+    public function getAccessTokenGoogleO2(){
+        $credGoId = Yii::app()->settings->googleCredentialsId;
+        $GoCredentials = Credentials::model ()->findByPk ($credGoId);
+        $params = [
+            'clientId' => $GoCredentials->auth->clientId,
+            'clientSecret' =>  $GoCredentials->auth->clientSecret,
+        ];
+        
+        
+        $provider = new League\OAuth2\Client\Provider\Google($params);
+        
+        $grant = new League\OAuth2\Client\Grant\RefreshToken();
+        $token = $provider->getAccessToken($grant, ['refresh_token' => $this->auth->refreshToken]);
+        return $token->getToken();
+        
+    }
+    
+    //function to get the expires time
+    public function checkAccessTokenGoogleO2Expire(){
+        $credGoId = Yii::app()->settings->googleCredentialsId;
+        $GoCredentials = Credentials::model ()->findByPk ($credGoId);
+        $params = [
+            'clientId' => $GoCredentials->auth->clientId,
+            'clientSecret' =>  $GoCredentials->auth->clientSecret,
+        ];
+        
+        
+        $provider = new League\OAuth2\Client\Provider\Google($params);
+        
+        $grant = new League\OAuth2\Client\Grant\RefreshToken();
+        $token = $provider->getAccessToken($grant, ['refresh_token' => $this->auth->refreshToken]);
+        return $token->getExpires();
+    }
+    
 
 }

@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -33,6 +33,8 @@
  * technical reasons, the Appropriate Legal Notices must display the words
  * "Powered by X2 Engine".
  **********************************************************************************/
+
+
 
 
 
@@ -360,7 +362,11 @@ class EmailInboxesController extends x2base {
     public function actionDownloadAttachment($uid, $part) {
         $mailbox = $this->getSelectedMailbox ();
         if (!$this->checkPermissions ($mailbox, 'view')) $this->denied ();
-        $this->fetchAttachment ($uid, $part);
+        if($mailbox->isZedNeeded()){
+            $this->fetchO2Attachment($uid, $part);
+        }else{
+            $this->fetchAttachment ($uid, $part);
+        }
     }
 
     /**
@@ -445,7 +451,7 @@ class EmailInboxesController extends x2base {
         } else {
             return null;
         }
-
+        
         if ($openImap)
             $mailbox->selectFolder ($currentFolder);
         else
@@ -632,6 +638,28 @@ class EmailInboxesController extends x2base {
         $message = $mailbox->fetchMessage ($uid);
         return $message->downloadAttachment ($part, $inline, $return);
     }
+    
+    
+    
+        /**
+     * Helper function to handle retrieving attachments
+     * @param int $uid IMAP Message UID
+     * @param float $part IMAP multipart message part number
+     * @param boolean $inline Whether it is an inline attachment
+     * @param boolean $return
+     */
+    private function fetchO2Attachment($uid, $part, $inline = false, $return = false) {
+        $mailbox = $this->getSelectedMailbox ();
+        if (!isset($mailbox))
+            $this->redirect('index');
+
+        $this->getCurrentFolder(true);
+
+        return $mailbox->download02Attachment ($uid, $part, $inline, $return);
+    }
+    
+   
+
 
     /**
      * Helper function to handle associating attachments to the related record

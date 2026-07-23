@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -37,6 +37,8 @@
 
 
 
+
+
 Yii::app()->clientScript->registerCssFile(
     Yii::app()->theme->baseUrl.'/css/views/profile/googleProjectForm.css');
 
@@ -67,6 +69,11 @@ echo CHtml::tag ('h3', array (), Yii::t('app', 'Configuring Google Integration')
 ?>
 <hr>
 <?php
+echo Yii::t('app', '{link}', array (
+        '{link}' => 
+            '<a href="https://www.youtube.com/watch?v=-cbAfOsQvgw&feature=youtu.be">'.
+                'Video Walkthrough</a>'
+    ));
 echo X2Html::orderedList (array (
     Yii::t('app', 'Visit {link} and create or select a Google project.', array (
         '{link}' => 
@@ -87,6 +94,7 @@ echo X2Html::orderedList (array (
                 'CalDav API',
                 'Google Calendar API',
                 'Google Drive API',
+                'Gmail API ',
                 )
             ),
             CHtml::encode (
@@ -107,7 +115,9 @@ echo X2Html::orderedList (array (
                     (@$_SERVER['HTTPS'] == 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . 
                         Yii::app()->controller->createUrl('/site/googleLogin')."\n".
                     (@$_SERVER['HTTPS'] == 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . 
-                        Yii::app()->controller->createUrl('/site/upload')
+                        Yii::app()->controller->createUrl('/site/upload')."\n".
+                    (@$_SERVER['HTTPS'] == 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . 
+                        Yii::app()->controller->createUrl('/profile/RepGoogleOauth2')
                 ),
             CHtml::encode (
                 Yii::t('app', 'When asked for "Authorized JavaScript Origins," input the '.

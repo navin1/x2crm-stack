@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -37,8 +37,16 @@
 
 
 
+
+
 Yii::import('application.models.X2Model');
 Yii::import('application.modules.emailInboxes.components.permissions.*');
+require_once(Yii::app()->basePath.'/components/LaminasMail/vendor/autoload.php');
+require_once(Yii::app()->basePath.'/components/vendor/autoload.php');
+//require_once(
+                //realpath(Yii::app()->basePath.'/components/LaminasMail/vendor/laminas/laminas-mail/src/Protocol/Imap.php'));
+//require_once(
+//                realpath(Yii::app()->basePath.'/components/LaminasMail/laminas-mail-2.13.x/src/Storage/Imap.php'));
 
 /**
  * This is the model class for table "x2_email_inboxes".
@@ -174,6 +182,12 @@ class EmailInboxes extends X2Model {
 
     // Cached list of folders for this mailbox
     private $_folders;
+    
+    // Cached storage of laminas
+    private $_o2storage;
+    
+    // Cached storage of protocol
+    private $_o2protocol;
 
     public static function model($className=__CLASS__) { return parent::model($className); }
 
@@ -224,19 +238,25 @@ class EmailInboxes extends X2Model {
     public function renderMessage ($uid, $ajax = false) {
         $message = $this->fetchMessage ($uid);
         $message->purifyAttributes ();
-        $replyAll = $message->getReplyAllAddresses ();
-        if (!empty ($replyAll)) {
-            $addresses = array_map (
-                function ($address) {
-                    if (!empty($address[0]))
-                        return "{$address[0]} <{$address[1]}>";
-                    else
-                        return $address[1];
-                },
-                $replyAll
-            );
-            $replyAll = implode (', ', $addresses);
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            $replyAll = $this->getZedReply($uid);
+            
+        }else{
+            $replyAll = $message->getReplyAllAddresses ();
+            if (!empty ($replyAll)) {
+                $addresses = array_map (
+                    function ($address) {
+                        if (!empty($address[0]))
+                            return "{$address[0]} <{$address[1]}>";
+                        else
+                            return $address[1];
+                    },
+                    $replyAll
+                );
+                $replyAll = implode (', ', $addresses);
+            }
         }
+       
         return Yii::app()->controller->renderPartial (
             '_emailMessage',
             array (
@@ -409,12 +429,16 @@ class EmailInboxes extends X2Model {
     public function copyToSent($message) {
         if (!empty ($message) && in_array($this->settings['copyToSent'], $this->folders)) {
             $sentFolder = $this->settings['copyToSent'];
-            $success = imap_append (
-                $this->stream,
-                $this->encodeMailboxString($this->mailbox.$sentFolder),
-                $message,
-                '\\Seen'
-            );
+            if($this->isZedNeeded() || $this->isGraphNeeded()){
+                $success = $this->O2protocol->appendMessage($sentFolder , $message, "\Seen");
+            }else{
+                $success = imap_append (
+                    $this->stream,
+                    $this->encodeMailboxString($this->mailbox.$sentFolder),
+                    $message,
+                    '\\Seen'
+                );
+            }
             return $success;
         } else {
             return false;
@@ -462,6 +486,10 @@ class EmailInboxes extends X2Model {
      */
     private $_configError = false;
     public function getStream() {
+        //dont need this for oauth2 
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            return true;
+        }
         if (!$this->_configError) {
             if ($this->isOpen())
                 return $this->_imapStream;
@@ -473,6 +501,7 @@ class EmailInboxes extends X2Model {
         } 
         $this->_configError = true;
         // This call clears the error stack, preventing the yii error handler from triggering
+        //Oauth 2 replaced
         $errors = imap_errors ();
         if ($errors) {
             $errors = array_unique ($errors);
@@ -484,6 +513,36 @@ class EmailInboxes extends X2Model {
             $errorMsg = '';
         }
         throw new EmailConfigException ($errorMsg);
+    }
+    
+    
+    public function getO2storage() {
+        if (isset($this->_o2storage)) {
+           return $this->_o2storage;
+        }       
+
+        if (!isset($this->_o2protocol)) {
+            $mail = $this->tryImapLogin();
+            $this->_o2protocol = $mail;
+        }
+        
+        $storage = new Laminas\Mail\Storage\Imap($this->_o2protocol);
+        $this->_o2storage = $storage;
+        return $this->_o2storage;
+    }    
+    
+    
+    public function getO2Protocol() {
+        if (isset($this->_o2protocol)) {
+           return $this->_o2protocol;
+        }       
+        $mail = $this->tryImapLogin();
+        
+
+
+        $this->_o2protocol = $mail;
+        $store =  $this->O2storage;
+        return $this->_o2protocol;
     }
 
     /**
@@ -538,6 +597,20 @@ class EmailInboxes extends X2Model {
         if (is_null($folder))
             $folder = $this->currentFolder;
         $mailbox = $this->mailbox.$folder;
+        //update for oauth 2
+        //if(false){
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            $mailArray = array();
+            $mailArray['messages'] = $this->O2storage->countMessages();
+            $mailArray['unseen'] = $this->O2storage->countMessages(array('\Unseen'));
+            $mailArray['recent'] = $this->O2storage->countMessages(array('\Recent'));
+            if(isset(array_values(array_slice($this->O2storage->getUniqueId(), -1))[0]))
+                $mailArray['uidnext'] = array_values(array_slice($this->O2storage->getUniqueId(), -1))[0];
+            
+            return (object) $mailArray;
+                  
+        }
+       
         return imap_status($this->stream, $this->encodeMailboxString($mailbox), SA_ALL);
     }
 
@@ -575,6 +648,10 @@ class EmailInboxes extends X2Model {
             if ($status && isset($status->uidvalidity))
                 $this->_uidValidity = $status->uidvalidity;
         }
+        // if useing gmail oauth 2 for some reason no longer returns uidvalidity so droping that in this situation 
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            return 1;
+        }
         return $this->_uidValidity;
     }
 
@@ -610,7 +687,11 @@ class EmailInboxes extends X2Model {
      */
     public function parseFullHeader($uid) {
         $headerInfo = array();
-        $rawHeader = @imap_fetchheader($this->stream, $uid, FT_UID);
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            $rawHeader = $this->O2storage->getRawHeader($uid);
+        }else{
+            $rawHeader = @imap_fetchheader($this->stream, $uid, FT_UID);
+        }
         if (!$rawHeader)
             throw new CHttpException(400, Yii::t("emailInboxes", "Invalid IMAP message id"));
         $header = imap_rfc822_parse_headers($rawHeader);
@@ -668,7 +749,13 @@ class EmailInboxes extends X2Model {
         $cacheKey = $this->getCacheKey ('messageCount');
         $messageCount = $cache->get ($cacheKey);
         if ($messageCount !== false) return $messageCount;
-        $messageCount = imap_num_msg ($this->stream);
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            $messageCount = $this->O2storage->countMessages();
+        }else if($this->isGraphNeeded()){
+            
+        }else{    
+            $messageCount = imap_num_msg ($this->stream);
+        }
         $cache->set ($cacheKey, $messageCount, $this->getCacheTimeout ('messageCount')); 
         $this->_messageCount = $messageCount;
         return $messageCount;
@@ -712,7 +799,7 @@ class EmailInboxes extends X2Model {
      */
     public function searchInbox (
         $searchString=null, $searchCacheOnly=false, $lastUid=null, $pageSize=null) {
-
+        
         if ($pageSize === null) $pageSize = self::OVERVIEW_PAGE_SIZE;
         $dataProvider = false;
         $cache = $this->getCache ();
@@ -731,7 +818,7 @@ class EmailInboxes extends X2Model {
 
         // check if cache is valid and extract emails array if it is
         if ($cacheEntry instanceof EmailsCacheEntry && 
-            $cacheEntry->searchString === $searchString) {
+           $cacheEntry->searchString === $searchString) {
 
             //AuxLib::debugLogR ($cacheEntry->expirationTime);
             //AuxLib::debugLogR (time ());
@@ -774,51 +861,83 @@ class EmailInboxes extends X2Model {
             $emails = array ();
         }
 
-        if ($dataProvider) 
-            return $dataProvider;
-        if ($searchCacheOnly) 
-            return false;
+        //if ($dataProvider) 
+        //    return $dataProvider;
+       // if ($searchCacheOnly) 
+        //    return false;
 
         if (!$this->isOpen()) {
             $this->open ($this->currentFolder);
         }
 
-        if (!isset ($uids)) {
+        if (!isset ($uids) || true) {
             
-            // Fetch a list of headers
-            $uids = imap_search (
-                $this->stream, $searchString === null ? 'ALL' : $searchString, SE_UID);
+            if($this->isZedNeeded() || $this->isGraphNeeded()){
+
+                
+                $uids = $this->O2Protocol->search([empty($searchString) ? 'ALL' : $searchString]);
+                
+            }else{
+                // Fetch a list of headers
+                $uids = imap_search (
+                    $this->stream, $searchString === null ? 'ALL' : $searchString, SE_UID);
+            }
             if (!$uids) {
                 $uids = array ();
             } else {
                 $uids = array_reverse ($uids);
             }
         }
-
+        
         $this->setMessageCount (count ($uids));
        //AuxLib::debugLogR ('$uids = ');
         //AuxLib::debugLogR ($uids);
-
-        $result = $this->overview ($uids, $lastCachedUid, $lastUid);
+        //file_put_contents( "/tmp/jjtets.txt", json_encode($uids) . PHP_EOL, FILE_APPEND);
+        $result = $this->overview($uids, $lastCachedUid, $lastUid);
+        //printR($result,1);
+        //printR($result,1);
        //AuxLib::debugLogR ('$result = ');
         //AuxLib::debugLogR ($result);
-
+        
         $_SESSION[$this->lastUidSessionKey] = $this->nextUid;
 
         // Iterate over headers to get an array of emails
         // TODO: Make this more efficient. To preserve message order, all cached messages are 
         // iterated over. As a result, this loop gets slower as the cache grows.
         if (is_array($result)) {
-            $newEmails = array ();
-            foreach ($result as $header) {
-                $header = $this->parseHeader ($header);
-                $newEmails[$header->uid] = $header;
+            if($this->isZedNeeded() || $this->isGraphNeeded()){
+
+                $newEmails = array ();
+
+                foreach ($result as $key => $header) {
+
+                    $newEmails[$header->uid] = $this->parseHeader ($result[$key]);
+                }
+
+                foreach ($emails as $uid => $message) {
+
+                    $newEmails[$uid] = $message;
+                }
+
+                //need to sort
+                $emails = $newEmails;
+                krsort($emails); 
+                //array_reverse($emails, TRUE);
+            }else{
+                $newEmails = array ();
+                foreach ($result as $header) {
+                    $header = $this->parseHeader ($header);
+                    $newEmails[$header->uid] = $header;
+                }
+                foreach ($emails as $uid => $message) {
+                    $newEmails[$uid] = $message;
+                }
+                $emails = $newEmails;
+                //printR($newEmails,1);
             }
-            foreach ($emails as $uid => $message) {
-                $newEmails[$uid] = $message;
-            }
-            $emails = $newEmails;
         }
+        //printR($emails,1);
+        
 
         $cacheEntry->uids = $uids;
         $cacheEntry->emails = $emails;
@@ -975,10 +1094,14 @@ class EmailInboxes extends X2Model {
             '[Gmail]/Important',
             '[Gmail]/Spam',
             '[Gmail]/Trash',
+            //added for outlook
+            'Notes',
         );
         $sentFolders = array(
             'Sent',
             '[Gmail]/Sent Mail',
+            //added for outlook
+            'Outbox',
         );
         try {
             $folders = $this->getFolders ();
@@ -986,6 +1109,7 @@ class EmailInboxes extends X2Model {
             $folders = array();
         }
         $folders = array_diff ($folders, $skipFolders);
+
         foreach ($folders as $folder) {
             // Skip folders if logging is not requested
             if (in_array($folder, $sentFolders)) {
@@ -1009,21 +1133,38 @@ class EmailInboxes extends X2Model {
                 ->limit (1)
                 ->queryScalar ();
             $nextUid = $this->nextUid;
+
             if (!$nextUid || $nextUid === 1)
                 continue;
 
+            //run this if there is a max UID and nextUID then no new emails yet
+            if(($this->isZedNeeded() || $this->isGraphNeeded()) && isset($maxUid) && $maxUid + 1 == $nextUid)
+                continue;
+            
             // Select message UID criteria
             if ($maxUid && $maxUid + 1 != $nextUid) {
                 // Retrieve UIDs for messages after the most recently logged and the latest received
                 $criteria = ($maxUid + 1).':'.($nextUid - 1);
+                //convert the criteria from number:number to an array of the ids requested
+                if($this->isZedNeeded() || $this->isGraphNeeded()){
+                    $numarray = array();
+
+                    foreach (range(($maxUid + 1), ($nextUid - 1)) as $number)
+                        $numarray[] = $number;
+                    $criteria = $numarray;
+                }                
+                
             } else {
                 // Inbound logging for this folder has not started, try to log the most recent message
                 $criteria = $nextUid - 1;
+
             }
 
             // Retrieve message headers, filter on email to this inbox, and log each message
+
             if (isset ($criteria)) {
                 $result = $this->overview ($criteria);
+
                 $inbound = !in_array ($folder, $sentFolders);
                 if (is_array($result)) {
                     if ($inbound) {
@@ -1077,7 +1218,15 @@ class EmailInboxes extends X2Model {
         if ($_SESSION[$this->lastUidSessionKey] === $this->nextUid)
             return $dataProvider;
         $criteria = $_SESSION[$this->lastUidSessionKey].':'.$this->nextUid;
-
+        //convert the criteria from number:number to an array of the ids requested
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            $numarray = array();
+            
+            foreach (range($_SESSION[$this->lastUidSessionKey], $this->nextUid) as $number)
+                $numarray[] = $number;
+            $criteria = $numarray;
+        }
+        
         $result = $this->overview ($criteria);
 
         $_SESSION[$this->lastUidSessionKey] = $this->nextUid;
@@ -1134,6 +1283,10 @@ class EmailInboxes extends X2Model {
      * in the format "used / total (percent%)"
      */
     public function getQuotaString() {
+        //laminas does not support Quota 
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
+            return "Oauth2 does not support this feature";
+        }
         $quota = $this->quota;
         if (is_array($quota) && count($quota) === 2) {
             $used = $quota[0];
@@ -1176,8 +1329,18 @@ class EmailInboxes extends X2Model {
             return $this->_folders;
 
         if (!($this->_folders = $this->getCache ()->get ($this->getCacheKey ('folders')))) {
-            $this->_folders = array();
-            $folderList = imap_list($this->stream, $this->mailbox, "*");
+
+        $this->_folders = array();
+            if($this->isZedNeeded() || $this->isGraphNeeded()){
+                $folders = $this->O2Protocol->listMailbox();
+                
+                foreach($folders as $key => $value){
+                    $folderList[] = $key;
+                }
+                unset($folderList[1]);
+            }else{
+                $folderList = imap_list($this->stream, $this->mailbox, "*");
+            }
             if ($folderList) {
                 // process $folderList to make it more user friendly
                 foreach ($folderList as $folder) {
@@ -1215,12 +1378,18 @@ class EmailInboxes extends X2Model {
      * @param string $mailbox
      */
     public function selectFolder($folder) {
-        $this->setCurrentFolder ($folder);
-        $mailbox = $this->encodeMailboxString ($this->mailbox.$folder);
-        if ($this->isOpen())
-            imap_reopen($this->_imapStream, $mailbox);
-        else
-            $this->open ($folder);
+         if($this->isZedNeeded() || $this->isGraphNeeded()){
+             $this->setCurrentFolder ($folder);
+             $this->O2protocol->select($folder);
+
+         }else{
+            $this->setCurrentFolder ($folder);
+            $mailbox = $this->encodeMailboxString ($this->mailbox.$folder);
+            if ($this->isOpen())
+                imap_reopen($this->_imapStream, $mailbox);
+            else
+                $this->open ($folder);
+         }
     }
 
     /**
@@ -1274,6 +1443,7 @@ class EmailInboxes extends X2Model {
      * @return array message overviews
      */
     public function overview ($uids, $firstUid=null, $lastUid=null) {
+       
         if (is_array ($uids)) {
             if ($lastUid !== null) {
                 $indexOfLastUid = ArrayUtil::numericIndexOf ($lastUid, $uids);
@@ -1281,23 +1451,78 @@ class EmailInboxes extends X2Model {
                     $endIndex = min (
                         count ($uids), $indexOfLastUid + self::OVERVIEW_PAGE_SIZE + 1);
                     $uids = array_slice ($uids, 0, $endIndex);
+                    //printR("here2",1);
                 }
             } else {
+                 //printR(self::OVERVIEW_PAGE_SIZE,1);
                 $uids = array_slice ($uids, 0, self::OVERVIEW_PAGE_SIZE);
             }
             if ($firstUid !== null) {
+                //printR("here3",1);
                 $indexOfFirstUid = ArrayUtil::numericIndexOf ($lastUid, $uids);
                 if ($indexOfLastUid) {
                     $uids = array_slice ($uids, $indexOfFirstUid + 1);
                 }
             }
         }
+        
+        if($this->isZedNeeded() || $this->isGraphNeeded()){
 
-        $overview = imap_fetch_overview (
-            $this->stream,
-            $this->sequence ($uids),
-            FT_UID);
-        return $overview;
+            $overview = array();
+            //check to see if uid is a real one
+            $ligitIDs = $this->O2storage->getUniqueId();
+            
+            if (!is_array($uids))
+                $uids = array($uids);
+            //need to make sure we go from smallest to bigest
+            //array_flip($uids);
+            foreach($uids as $uid){
+                //check to make sure the id is real
+                //check to make sure not getting next ID too
+              
+                //if(in_array($uid,$ligitIDs) && end($ligitIDs) != $uid){
+                //decided to drop the UID check since we are using the sequential IDs
+                if(TRUE){
+                    //take the message object and convert it to a STD object
+                     $rawMes = $this->O2storage->getMessage($uid);
+                    
+                    //printR($rawMes->getHeader('subject')->getFieldValue(),1);
+                    $mailArray = array('uid' => $uid,
+                            //'uid' => $this->O2storage->getUniqueId($uid),
+                            'subject' => $rawMes->getHeader('subject')->getFieldValue(),
+                            'from' => $rawMes->getHeader('from')->getFieldValue(),
+                            'to' => $rawMes->getHeader('to')->getFieldValue(),
+                            'date' => $rawMes->getHeader('date')->getFieldValue(),
+                            //'message_id' => $rawMes->,
+                            //'size' => $rawMes->,
+                            //'msgno' => $rawMes->,
+                            //'recent' => $rawMes->,
+                            'flagged' => $rawMes->hasFlag(Laminas\Mail\Storage::FLAG_FLAGGED),
+                            'answered' => $rawMes->hasFlag(Laminas\Mail\Storage::FLAG_ANSWERED),
+                            'deleted' => $rawMes->hasFlag(Laminas\Mail\Storage::FLAG_DELETED),
+                            'seen' => $rawMes->hasFlag(Laminas\Mail\Storage::FLAG_SEEN),
+                            'draft' => $rawMes->hasFlag(Laminas\Mail\Storage::FLAG_DRAFT),
+                            //'udate' => $rawMes->hasFlag($this->_o2storage::FLAG_FLAGGED),
+
+                            );
+                   
+                    if(isset($mailArray))
+                        $overview[] =  (object)($mailArray);
+                }
+                
+
+                
+            }
+             
+            return $overview;
+        }else{
+            //Oauth 2 replaced
+            $overview = imap_fetch_overview (
+                $this->stream,
+                $this->sequence ($uids),
+                FT_UID);
+            return $overview;
+        }
     }
 
     /**
@@ -1347,28 +1572,162 @@ class EmailInboxes extends X2Model {
         $cacheKey = $this->getMsgCacheKey ($uid);
         $cache = $this->getCache ();
         $message = $cache->get($cacheKey);
-        if ($message && is_array($message->attachments))
-            return $message;
+        //if ($message && is_array($message->attachments))
+        //    return $message;
 
         // Fetch full header of the message
+        
         $overview = $this->overview($uid);
         if (empty($overview))
             throw new CHttpException(404, Yii::t('emailInboxes',
                 'Unable to retrieve the specified message'));
-        $message = $this->parseHeader($overview[0]);
-        $additionalHeaders = $this->parseFullHeader($uid);
-        foreach ($additionalHeaders as $type => $value)
-            $message->$type = $value;
+       
 
-        // Fetch message body and attachments
-        $structure = imap_fetchstructure($this->stream, $uid, FT_UID);
-        $this->parseMessageBody ($message, $structure);
+
+
+            $message = $this->parseHeader($overview[0]);
+            $additionalHeaders = $this->parseFullHeader($uid);
+            foreach ($additionalHeaders as $type => $value)
+                $message->$type = $value;
+
+            // Fetch message body and attachments
+            if($this->isZedNeeded() || $this->isGraphNeeded()){
+
+
+                $o2mess = $this->digParts($this->O2storage->getMessage($uid));
+                     
+                //now I have the content
+                $message->body = $o2mess;
+
+                $attach = $this->digAttach($this->O2storage->getMessage($uid), $uid);
+                $message->attachments = $attach;
+
+                //printR($this->O2storage->getMessage($uid)->getPart(2)->getHeaderField('ContentDisposition', null, 'parameters')['filename'],1);
+            }else{
+                $structure = imap_fetchstructure($this->stream, $uid, FT_UID);
+                $this->parseMessageBody ($message, $structure);
+            }
+
 
         $this->logToAssociatedRecords ($message, true);
         $cache->set($cacheKey, $message, 60 * self::IMAP_CACHE_MSG_TIMEOUT);
         return $message;
     }
+    
+    public function digAttach($part, $uid){
+        $attachmentsPart = array();
+        if($part->countParts() > 1){
+            for ($x = 2; $x <= $part->countParts(); $x++) {
+            //check to see what type of object
+            //if text html just dig on that
+            //printR($part->getPart(2)->getHeaderField('ContentType'),1);
+                if($part->getPart($x)->getHeaderField('ContentType') != 'text/html' &&
+                        $part->getPart($x)->getHeaderField('ContentDisposition') == "attachment"){
+                    $filename = $part->getPart($x)->getHeaderField('ContentDisposition', null, 'parameters')['filename'];
+                    //$size = $structure->bytes;
+                    //$type = ($disposition === 'ATTACHMENT' ? 'attachment' : 'inline');
+                    $type = "attachment";
+                    $mimeType = $part->getPart($x)->getHeaderField('ContentType');
+                    //$partNumber = is_null($part) ? 1 : $part;
+                    //if (isset($structure->id))  {
+                        // Retrieve inline attachment content ids
+                    //    if (preg_match('/<(.*?)>/', $structure->id, $matches))
+                    //        $cid = $matches[1];
+                    //}
 
+                    // Save attachment info
+                    $attachmentsPart[] = array(
+                        'filename' => $filename,
+                        //'cid' => isset($cid) ? $cid : null,
+                        'part' => $x,
+                        'mimetype' => $mimeType,
+                        'type' => $type,
+                        'link' => CHtml::link($filename, array(
+                            'downloadAttachment',
+                            'uid' => $uid,
+                            'part' => $x,
+                        )),
+                    );
+
+                }
+            }
+        }
+        return $attachmentsPart;
+        
+    }
+    
+    
+    
+    /**
+     * Download a specific attachment
+     * @param int $part Message part number
+     */
+    public function download02Attachment($uid, $part, $inline = false, $return=false, $decode=true) {
+        $o2mess = $this->O2storage->getMessage($uid);
+        $mimeType = $o2mess->getPart($part)->getHeaderField('ContentType');
+        $filename = $o2mess->getPart($part)->getHeaderField('ContentDisposition', null, 'parameters')['filename'];
+        
+        $message = $o2mess->getPart($part)->getContent();
+        $encoding = $o2mess->getPart($part)->getHeaderField('ContentTransferEncoding');
+        //incase of decode
+        if($decode){
+            switch (strtoupper($encoding)) {
+                case '7BIT':
+                    // https://stackoverflow.com/questions/12682208/parsing-email-body-with-7bit-content-transfer-encoding-php
+                    //$lines = explode('\r\n', $message);
+                    //$words = explode(' ', $lines[0]);
+                    //if ($lines[0] === $words[0])
+                    //    $message = base64_decode($message);
+                case '8BIT':
+                    $message = quoted_printable_decode(imap_8bit($message));   break;
+                case 'BINARY':
+                    $message = imap_binary($message); break;
+                case 'BASE64':
+                    $message = imap_base64($message); break;
+                case 'QUOTED-PRINTABLE':
+                    $message = imap_qprint($message); break;
+            }
+
+        }
+        //printR($o2mess->getPart($part)->getHeaderField('ContentTransferEncoding'),1);
+        $size = strlen($message); // $partStruct->bytes; is not accurate due to encoding
+        //$mimeType = $this->inbox->getStructureMimetype ($partStruct, true);
+
+        if (!$return) {
+            // Render the attachment
+
+            header("Content-Description: File Transfer");
+            header("Content-Type: ".$mimeType);
+            if (!$inline)
+                header("Content-Disposition: attachment; filename=\"$filename\"");
+            header("Content-Transfer-Encoding: binary");
+            header("Content-Length: ".$size);
+            header("Expires: 0");
+            header("Cache-Control: must-revalidate");
+            header("Pragma: public");
+            echo $message;
+        } else {
+            return array ($mimeType, $filename, $size, $o2mess, $encoding);
+        }
+    }
+
+    
+        
+    public function digParts($part){
+        if($part->countParts() > 1){
+            //check to see what type of object
+            //if text html just dig on that
+            
+            if($part->getPart(2)->getHeaderField('ContentType') == "text/html"){
+                return $this->digParts($part->getPart(2));
+            }else{
+                return $this->digParts($part->getPart(1));
+            }
+        }else{
+            return imap_qprint($part->getContent());
+        }
+    }
+    
     /**
      * Clear a message from the cache
      * @param int $uid Unique ID of the message to remove
@@ -1702,6 +2061,11 @@ class EmailInboxes extends X2Model {
         return array($body, $attachments);
     }
 
+    
+    public function getZedReply($uid){
+        
+        return $this->O2storage->getMessage($uid)->getHeader("From")->getFieldValue();
+    }
     /**
      * @param array $criteria email attributes values indexed by attribute name
      * @param array $emails 
@@ -1809,6 +2173,171 @@ class EmailInboxes extends X2Model {
         if (!$ofModule) return Yii::t('app', 'Email Inbox' . ($plural ? 'es' : ''));
         return parent::getDisplayName ($plural, $ofModule);
     }
+    
+    /**
+     * check to see if we need to use the alternative to imap since google will stop
+     * supporting
+     */
+    public function isZedNeeded(){
+        //return false;
+        $credentials = $this->getCredentials ();
+        if(!isset($credentials))return false;
+        if($credentials->modelClass == "GMailAccountOauth2"){
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * check to see if we need to use the alternative to imap since microsoft will stop
+     * supporting
+     */
+    public function isGraphNeeded(){
+        //return false;
+        $credentials = $this->getCredentials ();
+        if(!isset($credentials))return false;
+        if($credentials->modelClass == "OutlookEmailAccountOauth2"){
+            return true;
+        }
+        return false;
+    }
+    
+    
+        //a lot of this comes from https://github.com/google/gmail-oauth2-tools/blob/master/php/oauth2.php
+         /**
+         * Tries to login to IMAP and show inbox stats.
+         */
+    function tryImapLogin() {
+        
+          /**
+           * Make the IMAP connection and send the auth request
+           */
+            if($this->isZedNeeded()){
+                $mail = new Laminas\Mail\Protocol\Imap('imap.gmail.com',
+                         993,
+                         'ssl'
+                     );
+                     $refTok = $this->getCredentials ()->auth->refreshToken;
+                     $accTok = $this->getCredentials ()->getAccessTokenGoogleO2();
+               if ($this->oauth2Authenticate($mail, $this->getCredentials ()->auth->email, $accTok)) {
+                  
+                     $folder = $this->getCurrentFolder();
+                     $mail->select($folder);
+                    return $mail;
+               } else {
+                 echo '<h1>Failed to login</h1>';
+               }
+            }elseif($this->isGraphNeeded()){
+                    $mail = new Laminas\Mail\Protocol\Imap('outlook.office365.com',
+                         993,
+                         'tls'
+                     );
+                     $refTok = $this->getCredentials ()->auth->refreshToken;
+                     $client = new OutlookAuthenticatorOauth2('MailBox');
+                     $accTok = $client->getAccessTokenIMAP($this->getCredentials ());
+                     
+               if ($this->oauth2Authenticate($mail, $this->getCredentials ()->auth->email, $accTok)) {
+                   
+                     $folder = $this->getCurrentFolder();
+                     
+                     $mail->select($folder);
+                     
+                    return $mail;
+               } else {
+                 echo '<h1>Failed to login</h1>';
+               }
+            }
+    }
+    
+        /**
+    * Given an open IMAP connection, attempts to authenticate with OAuth2.
+    *
+    * $imap is an open IMAP connection.
+    * $email is a Gmail address.
+    * $accessToken is a valid OAuth 2.0 access token for the given email address.
+    *
+    * Returns true on successful authentication, false otherwise.
+    */
+   function oauth2Authenticate($mail, $email, $accessToken) {
+        
+
+
+                //token used for microsoft has to be diffrent
+                if($this->isGraphNeeded()){
+                    //$authenticateParams = base64_encode("user=" . $email . "\1Aauth=Bearer " . $accessToken . "\1\1");
+                    //printR('AUTHENTICATE XOAUTH2 '.  $authenticateParams,1);
+                    //printR($authenticateParams,1);
+                    //$mail->sendRequest('AUTHENTICATE XOAUTH2 '.  $authenticateParams);
+                    $authenticateParams = array('XOAUTH2',
+                     base64_encode("user=$email\1auth=Bearer $accessToken\1\1"));
+                    $mail->sendRequest('AUTHENTICATE', $authenticateParams);
+                }else{
+                    $authenticateParams = array('XOAUTH2',
+                     base64_encode("user=$email\1auth=Bearer $accessToken\1\1"));
+                    $mail->sendRequest('AUTHENTICATE', $authenticateParams);
+                }
+                
+                  while (true) {
+                    $response = "";
+                    $is_plus = $mail->readLine($response, '+', true);
+
+                    if ($is_plus) {
+                      error_log("got an extra server challenge: $response");
+                      // Send empty client response.
+                      $mail->sendRequest('');
+                    } else {
+                      if (preg_match('/^NO /i', $response) ||
+                          preg_match('/^BAD /i', $response)) {
+                        error_log("got failure response: $response");
+                        return false;
+                      } else if (preg_match("/^OK /i", $response)) {
+                        return true;
+                      } else {
+                        // Some untagged response, such as CAPABILITY
+                      }
+                    }
+                  }
+   }
+   
+   public function parseEmail($rawEmail){
+        // handle email
+        $lines = explode("\n", $rawEmail);
+
+        // empty vars
+        $from = "";
+        $subject = "";
+        $headers = "";
+        $message = "";
+        $splittingheaders = true;
+        for ($i=0; $i < count($lines); $i++) {
+            if ($splittingheaders) {
+                // this is a header
+                $headers .= $lines[$i]."\n";
+
+                // look out for special headers
+                if (preg_match("/^Subject: (.*)/", $lines[$i], $matches)) {
+                    $subject = $matches[1];
+                }
+                if (preg_match("/^From: (.*)/", $lines[$i], $matches)) {
+                    $from = $matches[1];
+                }
+                if (preg_match("/^To: (.*)/", $lines[$i], $matches)) {
+                    $to = $matches[1];
+                }
+            } else {
+                // not a header, but message
+                $message .= $lines[$i]."\n";
+            }
+
+            if (trim($lines[$i])=="") {
+                // empty line, header section has ended
+                $splittingheaders = false;
+            }
+        }
+        return array('subject'=> $subject, 'from'=>$from , 'to' => $to);
+   }
+   
+   
 }
 
 /**

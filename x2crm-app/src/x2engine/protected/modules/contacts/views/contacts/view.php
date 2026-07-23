@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -37,14 +37,14 @@
 
 
 
-$jsVars = "modelId = '$model->id'; modelName = '$model->name'; modelEmail = '$model->email'";
+$nameEncode = addslashes($model->name);
+$jsVars = "modelId = '$model->id'; modelName = '$nameEncode'; modelEmail = '$model->email'";
 Yii::app()->clientScript->registerScript('jsVars', $jsVars);
 
 Yii::app()->clientScript->registerScriptFile(Yii::app()->getBaseUrl() . '/js/Relationships.js');
 
 
 Yii::app()->clientScript->registerCss('contactRecordViewCss', "
-
 #content {
     background: none !important;
     border: none !important;
@@ -52,7 +52,6 @@ Yii::app()->clientScript->registerCss('contactRecordViewCss', "
 .show-left-bar .page-title > .x2-button {
     display: none !important;
 }
-
 ");
 
 Yii::app()->clientScript->registerResponsiveCssFile(
@@ -88,7 +87,8 @@ $serviceModule = Modules::model()->findByAttributes(array('name' => 'services'))
 
 $menuOptions = array(
     'all', 'lists', 'create', 'view', 'edit', 'share', 'delete',
-    'email', 'attach', 'quotes', 'print', 'viewOnMap', 'editLayout', 'addRecordAlias', 'convertToLead', 'convertToAccount'
+    'email', 'attach', 'quotes', 'print', 'viewOnMap', 'editLayout', 
+    'addRecordAlias', 'convertToLead', 'convertToAccount', 'helpGuide',
 );
 $menuOptions[] = ($subscribed ? 'unsubscribe' : 'subscribe');
 if ($opportunityModule->visible && $accountModule->visible) {
@@ -105,11 +105,8 @@ $(function() {
     $('body').data('unsubscribeText', " . json_encode(Yii::t('contacts', 'Unsubscribe')) . ");
     $('body').data('modelType', $modelType);
     $('body').data('modelId', $modelId);
-
-
     $('.x2-subscribe-button').qtip();
 });
-
 // subscribe or unsubscribe from this contact
 function subscribe(link) {
     $('body').data('subscribed', !$('body').data('subscribed')); // subscribe or unsubscribe
@@ -120,7 +117,6 @@ function subscribe(link) {
         link.html($('body').data('subscribeText'));
     return false; // stop event propagation
 }
-
 ", CClientScript::POS_HEAD);
 
 // widget layout
@@ -200,7 +196,7 @@ $themeUrl = Yii::app()->theme->getBaseUrl();
     <?php
     $this->widget('InlineEmailForm', array(
         'attributes' => array(
-            'to' => '"' . $model->name . '" <' . $model->email . '>, ',
+            'to' => '"' . $model->name . '" <' . $model->email . '>',
             'modelName' => 'Contacts',
             'modelId' => $model->id,
             'targetModel' => $model,

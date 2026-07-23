@@ -1,7 +1,7 @@
 <?php
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -37,6 +37,8 @@
 
 
 
+
+
 /**
  * User profiles controller
  *
@@ -65,7 +67,8 @@ class ProfileController extends x2base {
                     'deleteChartSetting', 'addComment',
                     'toggleFeedControls', 'toggleFeedFilters', 'setWidgetSetting',
                     'showWidgetContents', 'getWidgetContents',
-                    'setWidgetOrder', 'profiles', 'settings', 'deleteSound', 'deleteBackground',
+                    'setWidgetOrder', 'saveGroupLayout', 'setProfileLayout', 
+		    'profiles', 'settings', 'deleteSound', 'deleteBackground',
                     'changePassword', 'setResultsPerPage', 'hideTag', 'unhideTag', 'resetWidgets',
                     'updatePost', 'loadTheme', 'createTheme', 'saveTheme', 'saveMiscLayoutSetting',
                     'createUpdateCredentials', 'manageCredentials', 'deleteCredentials', 
@@ -76,7 +79,9 @@ class ProfileController extends x2base {
                     'createProfileWidget','deleteSortableWidget','deleteTheme','previewTheme', 
                     'resetTours', 'disableTours', 'mobileIndex', 'mobileView', 'mobileActivity', 
                     'beginTwoFactorActivation', 'completeTwoFactorActivation', 'disableTwoFactor',
-                    'mobileViewEvent', 'mobileDeleteEvent','mobilePublisher', 'mobileCheckInPublisher'),
+                    'mobileViewEvent', 'mobileDeleteEvent','mobilePublisher', 'mobileCheckInPublisher', 
+                    
+                    ),
                 'users' => array('@'),
             ),
             array('deny', // deny all users
@@ -108,6 +113,8 @@ class ProfileController extends x2base {
             'setPortlets',
         ));
     }
+    
+    
 
     public function actionTestPage() {
         $this->render('testPage');
@@ -591,6 +598,21 @@ class ProfileController extends x2base {
      * @throws CHttpException
      */
     public function actionCreateUpdateCredentials($id = null, $class = null, $bounced = false) {
+
+        //for google return of oauth token
+        if(isset($_GET['code'])){
+            $credGoId = Yii::app()->settings->googleCredentialsId;
+            $Googlecredentials = Credentials::model ()->findByPk ($credGoId);
+            $redirectUri = Yii::app()->createExternalUrl('protected/components/phpMailer/get_oauth_token.php');
+            $clientId = $Googlecredentials->auth->clientId;
+            $clientSecret = $Googlecredentials->auth->clientSecret;
+            $params = [
+                'clientId' => $clientId,
+                'clientSecret' => $clientSecret,
+                'redirectUri' => $redirectUri,
+                'accessType' => 'offline'
+            ];
+        }
         
         $this->pageTitle = Yii::t('app', 'Edit Credentials');
         $profile = Yii::app()->params->profile;
@@ -611,7 +633,11 @@ class ProfileController extends x2base {
             $model->setAttributes ($model->getAuthModel ()->getMetaData (), false);
             $disableMetaDataForm = true;
         }
-        if (in_array ($model->modelClass, array ('TwitterApp', 'GoogleProject', 'OutlookProject'))) {
+        if (in_array ($model->modelClass, 
+               array ('TwitterApp', 
+                      'GoogleProject', 
+                      
+                      'OutlookProject'))) {
             if (!Yii::app()->params->isAdmin) {
                 $this->denied ();
             }
@@ -623,9 +649,17 @@ class ProfileController extends x2base {
                     Yii::app()->settings->gaTracking_internal = 
                         $_POST['Admin']['gaTracking_internal'];
                 }
+                
                 if (isset ($_POST['Admin']['googleIntegration'])) {
                     Yii::app()->settings->googleIntegration = 
                         $_POST['Admin']['googleIntegration'];
+                }
+               
+            }
+            if ($model->modelClass === 'SlackProject') {
+                if (isset ($_POST['Admin']['slackIntegration'])) {
+                    Yii::app()->settings->slackIntegration = 
+                        $_POST['Admin']['slackIntegration'];
                 }
             }
             if ($model->modelClass === 'OutlookProject') {
@@ -634,10 +668,27 @@ class ProfileController extends x2base {
                         $_POST['Admin']['outlookIntegration'];
                 }
             }
+            
             $this->layout = '//layouts/column1';
         }
 
         $model->scenario = $model->isNewRecord ? 'create' : 'update';
+        
+        
+
+        if($model->modelClass == "GMailAccountOauth2"){
+            if (isset($_POST['Credentials'])){
+                $model->attributes = $_POST['Credentials'];
+                $this->setGoogleOauth2($model);
+            }
+        }
+        
+        if($model->modelClass == "OutlookEmailAccountOauth2"){
+            if (isset($_POST['Credentials'])){
+                $model->attributes = $_POST['Credentials'];
+                $this->setOutlookOauth2($model);
+            }
+        }
         
         // Apply changes if any:
         if (isset($_POST['Credentials'])) {
@@ -672,9 +723,17 @@ class ProfileController extends x2base {
                     $message = Yii::t('app', 'Saved') . ' ' . Formatter::formatLongDateTime($time);
                     Yii::app()->user->setFlash ('success', $message);
                     if (in_array (
-                        $model->modelClass, array ('TwitterApp', 'GoogleProject', 'OutlookProject'))) {
-
-                        if ($model->modelClass === 'GoogleProject' || $model->modelClass === 'OutlookProject') {
+                        $model->modelClass, array (
+                        'TwitterApp', 
+                        'GoogleProject', 
+                        'OutlookProject', 
+                        )
+                        )
+                    ) {
+                        if ($model->modelClass === 'GoogleProject' || 
+                            $model->modelClass === 'OutlookProject' || 
+                            $model->modelClass === 'NexmoProject' ||
+                            $model->modelClass === 'SlackProject') {
                             Yii::app()->settings->save ();
                         }
                     } else {
@@ -694,6 +753,159 @@ class ProfileController extends x2base {
                     $disableMetaDataForm : false,
             ));
     }
+    
+
+    private function setOutlookOauth2($model){
+        $model->save();
+        $client = new OutlookAuthenticatorOauth2('SignUp');
+        $url = $client->getAuthorizationUrl($model);
+        header('Location: ' . $url);
+        exit;
+    }
+    
+    public function actionRepOutlookOauth2(){
+        $client = new OutlookAuthenticatorOauth2('SignUp');
+        $creds = Credentials::model()->findByPk($_SESSION['microsoftID']);
+        //here we will confirm the state sent over was the same one we passed 
+        if($_SESSION['microsoftState'] != $_GET['state']){
+            throw new Exception(421, 'State given to microsoft was not the same one returned, possible hack attempt.');
+        }
+        //save the code we got
+        $creds->auth->returnCode = $_GET['code'];
+        $creds->save();
+        
+        $client->getAndsetTokens($creds);
+        
+        $url = $client->getAuthorizationUrl($creds,true);
+        header('Location: ' . $url);
+        exit;
+    }
+    
+    //have to have a second code since imap scope is not the same as the graph scope
+    public function actionRepOutlookOauth2Imap(){
+        $client = new OutlookAuthenticatorOauth2('SignUp');
+        $creds = Credentials::model()->findByPk($_SESSION['microsoftID']);
+        //here we will confirm the state sent over was the same one we passed 
+        if($_SESSION['microsoftState'] != $_GET['state']){
+            throw new Exception(421, 'State given to microsoft was not the same one returned, possible hack attempt.');
+        }
+        //save the code we got
+        $creds->auth->IMAPreturnCode = $_GET['code'];
+        $creds->save();
+        
+        $client->getAndsetTokensImap($creds);
+        
+        $this->redirect(array('manageCredentials'));
+    }
+    
+    private function setGoogleOauth2($model){
+
+        $options = [];
+        $provider = null;
+        $time = time();
+        $credGoId = Yii::app()->settings->googleCredentialsId;
+        $credentials = Credentials::model ()->findByPk ($credGoId);
+
+        if ($model->isNewRecord)
+            $model->createDate = $time;
+        $model->lastUpdated = $time;
+        $model->save();
+        $urlReturn = (@$_SERVER['HTTPS'] == 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . 
+                            Yii::app()->controller->createUrl('/profile/RepGoogleOauth2');
+        $params = [
+            'clientId' => $credentials->auth->clientId,
+            'clientSecret' =>  $credentials->auth->clientSecret,
+            'redirectUri' =>  $urlReturn,
+            'accessType' => 'offline'
+        ];
+                require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/PHPMailer.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/SMTP.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/Exception.php'));
+            foreach (glob(Yii::app()->basePath."/components/vendor/*.php") as $filename)
+                {
+                    require_once(
+                        realpath($filename));
+                }
+            require_once(
+                realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-client/src/Provider/AbstractProvider.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-google/src/Provider/Google.php'));
+
+        $provider = new League\OAuth2\Client\Provider\Google($params);
+        $options = [
+            'scope' => [
+                'https://mail.google.com/'
+            ],
+            'prompt' => 'consent',
+        ];
+        // If we don't have an authorization code then get one
+        $authUrl = $provider->getAuthorizationUrl($options);
+        $_SESSION['oauth2state'] = $provider->getState();
+        $_SESSION['providerOau'] = $model->id;
+        header('Location: ' . $authUrl);
+        exit;
+        
+    }         
+    
+    
+    public function actionRepGoogleOauth2(){
+        $model = Credentials::model()->findByPk($_SESSION['providerOau']);
+        $options = [];
+        $provider = null;
+        $credGoId = Yii::app()->settings->googleCredentialsId;
+        $credentials = Credentials::model ()->findByPk ($credGoId);
+
+        $urlReturn = (@$_SERVER['HTTPS'] == 'on' ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . 
+                            Yii::app()->controller->createUrl('/profile/RepGoogleOauth2');
+        $params = [
+            'clientId' => $credentials->auth->clientId,
+            'clientSecret' =>  $credentials->auth->clientSecret,
+            'redirectUri' =>  $urlReturn,
+            'accessType' => 'offline'
+        ];
+                require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/PHPMailer.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/SMTP.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/Exception.php'));
+            foreach (glob(Yii::app()->basePath."/components/vendor/*.php") as $filename)
+                {
+                    require_once(
+                        realpath($filename));
+                }
+            require_once(
+                realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-client/src/Provider/AbstractProvider.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-google/src/Provider/Google.php'));
+
+        $provider = new League\OAuth2\Client\Provider\Google($params);
+        $options = [
+            'scope' => [
+                'https://mail.google.com/'
+            ]
+        ];
+        // Try to get an access token (using the authorization code grant)
+        $token = $provider->getAccessToken(
+            'authorization_code',
+            [
+                'code' => $_GET['code']
+            ]
+        );
+        // Use this to interact with an API on the users behalf
+        // Use this to get a new access token if the old one expires
+
+        $code = $token->getRefreshToken();
+        $model->auth->refreshToken = $code;
+        $model->save();
+        $this->redirect(array('manageCredentials'));
+
+    }              
+    
+    
 
     /**
      * Action to be called via ajax to verify authentication to the SMTP server
@@ -797,7 +1009,7 @@ class ProfileController extends x2base {
                     $model->$name = $value;
                 }
                 if ($model->save()) {
-                    $this->redirect(array('view', 'id' => $model->id));
+                    $this->redirect(array('view', 'id' => $model->id, 'publicProfile' => 1));
                 }
             }
             
@@ -806,7 +1018,7 @@ class ProfileController extends x2base {
                 'users' => $users,
             ));
         } else {
-            $this->redirect(array('/profile/view', 'id' => $id));
+            $this->redirect(array('/profile/view', 'id' => $id, 'publicProfile' => 1));
         }
     }
 
@@ -853,6 +1065,7 @@ class ProfileController extends x2base {
             $prof = Profile::model()->findByPk($id);
             if (isset($_FILES['Profile'])) {
                 $prof->photo = CUploadedFile::getInstance ($prof, 'photo'); 
+                self::reduceImageSize($prof->photo->tempName);
                 if ($prof->save ()) {
                 } else {
                     Yii::app()->user->setFlash(
@@ -865,6 +1078,72 @@ class ProfileController extends x2base {
         }
         $this->redirect(Yii::app()->request->urlReferrer);
         // $this->redirect(array('view', 'id' => $id));
+    }
+
+    /**
+     * Resizes and compresses a file into png if larger than limitSize
+     * @param string $src filepath
+     * @param int $limitSize maximum image area
+     * @param int $quality compression level 0-9, 9 being most compressed
+     * @return bool true when image has been reduced
+     */
+    public static function reduceImageSize($src, $limitSize = 40000, $quality = 9) {
+        //need png support for this function, and format support for the original image.
+        if (!gd_info()['PNG Support'] || !$image = self::getImage($src)) {
+            return 0;
+        }
+
+        /** RESIZE SEGMENT
+         *  the limitSize is effectively the maximum area (number of pixels)
+         *  if the image is larger than this, it will be scaled such that
+         *  the area is just under the limit size (due to flooring, the
+         *  new image size can be short on one of the sides)
+         */
+        list($width, $height) = getimagesize($src);
+        $area = $width * $height;
+        if ($area > $limitSize) {
+            $scale = sqrt($limitSize / $area);
+            $image = imagescale($image, $scale*$width, $scale*$height);
+        }
+
+        /** COMPRESSION SEGMENT
+         *  it's possible that compression could make the new image larger
+         *  this is a safety measure to keep the rescaled image if it is preferrable
+         */
+        $oldImg = file_get_contents($src);
+        $oldSize = strlen($oldImg);
+        imagepng($image, $src, $quality);
+        $newSize = strlen(file_get_contents($src));
+
+        if ($newSize > $oldSize) {
+            file_put_contents($src, $oldImg);
+            return 0;
+        }
+        return 1;
+    }
+
+    /**
+     * Returns image resource from specified file
+     * @param string $src filepath
+     * @return resource|null, depending on resource creation success
+     */
+    public static function getImage($src) {
+        try {
+            $mime = getimagesize($src)['mime']; //looks like "image/{format}"
+            $format = explode('/', $mime)[1];   //jpeg, gif, or png
+            $function = 'imagecreatefrom'.$format;
+            if (function_exists($function)) {
+                $image = $function($src);
+            } else {
+                //gd lacks support for the format
+                $image = null;
+            }
+            return $image;
+        } catch (Exception $e){
+            //problem creating the image
+            Yii::log($e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -1259,6 +1538,61 @@ class ProfileController extends x2base {
             return;
         }
         echo 'Failure: failed to set sort order';
+    }
+
+    /**
+     * Save Group Layout
+     * Only Admins can save the group layout
+     */
+    public function actionSaveGroupLayout() {
+        if (!isset($_POST['groupId'])) {
+            throw new CHttpException (400, 'Bad Request');
+        }
+
+	$profile = Profile::model()->findByPk(Yii::app()->user->id);
+        if(isset($_POST['groupId'])) $group = Groups::model()->findByPk($_POST['groupId']);
+        $layout = CJSON::encode($profile->ProfileWidgetLayout);
+
+        if (isset($group) && Yii::app()->params->isAdmin) {
+            $group->setDefaultLayout($layout);
+            if (!$group->save()) {
+                $success=true;
+            }
+        }
+        return isset($success) ? 'success' : 'failure';
+    }
+
+    public function actionSetProfileLayout() {
+        if (!isset($_POST['selected'])) {
+            throw new CHttpException (400, 'No Layout Selected');
+        }
+	$selected = $_POST['selected'];
+	
+	$profile = Profile::model()->findByAttributes(array('username' => User::getMe()->username));
+	$group = Groups::model()->findByPk($selected);
+
+	if($profile->currentLayout == 'personal' && $selected != 'personal'){
+	    $profile->personalLayout = CJSON::encode($profile->ProfileWidgetLayout);
+	    if(isset($group)){
+                $profile->setProfileWidgetLayout(CJSON::decode($group->layout));
+            }
+	}
+	if($profile->currentLayout != 'personal' && $selected != 'personal'){
+	    $group = Groups::model()->findByPk($selected);
+	    if(isset($group)){
+		$profile->setProfileWidgetLayout(CJSON::decode($group->layout));
+	    } 
+	}
+	if($profile->currentLayout != 'personal' && $selected == 'personal'){
+            $profile->setProfileWidgetLayout(CJSON::decode($profile->personalLayout));
+        }
+	
+	if(isset($profile)){
+	    $profile->currentLayout = $selected;
+	    $profile->save();
+	}
+
+        return isset($success) ? 'success' : 'failure';
     }
 
     /**
@@ -1666,7 +2000,7 @@ class ProfileController extends x2base {
             return;
         }
 
-        if (!Yii::app()->user->isGuest) {
+        if (!Yii::app()->user->isLoggedOut) {
             $activityFeedParams = $this->getActivityFeedViewParams($id, $publicProfile);
             $user = $activityFeedParams['model']->user;
             if(!$activityFeedParams['isMyProfile'] && Yii::app()->params->isAdmin &&
@@ -2234,7 +2568,15 @@ class ProfileController extends x2base {
                 'label' => Yii::t('profile', 'Manage Email Reports'), 
                 'url' => array('manageEmailReports')
             ),
-            
+            array(
+                'name' => 'helpGuide',
+                'label' => Yii::t('media', 'Profile Help'),
+                'url' => 'https://x2crm.com/reference-guide/x2crm-user-menu',
+                'linkOptions' => array(
+                    'id' => 'profile-help-guide-action-menu-link',
+                    'target' => '_blank',
+                )
+            ),
         );
 
         if ($this->action->id == 'view') {

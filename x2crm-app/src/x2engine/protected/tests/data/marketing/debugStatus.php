@@ -12,14 +12,14 @@ switch($mode) {
         return array(
             'code' => 404,
             'message' => 'Bad domain name!',
-            'exception' => new phpmailerException('bad domain name!', 404, null)
+            'exception' => new PHPMailer\PHPMailer\Exception('bad domain name!', 404, null)
         );
         break;
     case 2:
         return array(
             'code' => 401,
             'message' => 'SMTP authentication failed!',
-            'exception' => new phpmailerException('SMTP authentication failed!',phpmailer::STOP_CRITICAL,null),
+            'exception' => new PHPMailer\PHPMailer\Exception('SMTP authentication failed!',phpmailer::STOP_CRITICAL,null),
         );
         break;
     default:

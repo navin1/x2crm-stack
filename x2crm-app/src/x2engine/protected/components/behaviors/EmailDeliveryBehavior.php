@@ -2,7 +2,7 @@
 
 /***********************************************************************************
  * X2Engine Open Source Edition is a customer relationship management program developed by
- * X2 Engine, Inc. Copyright (C) 2011-2019 X2 Engine Inc.
+ * X2 Engine, Inc. Copyright (C) 2011-2022 X2 Engine Inc.
  * 
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License version 3 as published by the
@@ -34,6 +34,8 @@
  * technical reasons, the Appropriate Legal Notices must display the words
  * "Powered by X2 Engine".
  **********************************************************************************/
+
+
 
 
 
@@ -251,9 +253,9 @@ class EmailDeliveryBehavior extends CBehavior {
 
         try {
             $phpMail = $this->mailer;
-        }catch (phpmailerException $e){
+        }catch (PHPMailer\PHPMailer\Exception $e){
             // escalate error to force campaigns to halt
-            $escalated = new phpmailerException (
+            $escalated = new PHPMailer\PHPMailer\Exception (
                 $e->getMessage (), PHPMailer::STOP_CRITICAL);
             $this->status['code'] = '500';
             $this->status['exception'] = $escalated;
@@ -266,6 +268,34 @@ class EmailDeliveryBehavior extends CBehavior {
         // exception that PHPMailer throws but unfortunately the only way at the time of this
         // writing would be to use its translated exception messages (brittle).
         if ($this->credentials) {
+            //set up new function to deal with oauth2
+            if($this->credentials->modelClass == "GMailAccountOauth2"){
+                return $this->sendWithGoogleOauth2(
+                                $addresses,
+                                $subject,
+                                $message,
+                                $attachments,
+                                $unsubLink,
+                                $bounceHandlingEmail,
+                                $campaignInformation,
+                                $phpMail
+                        );
+                
+            }
+            
+            if($this->credentials->modelClass == "OutlookEmailAccountOauth2"){
+                return $this->sendWithOutlookOauth2(
+                                $addresses,
+                                $subject,
+                                $message,
+                                $attachments,
+                                $unsubLink,
+                                $bounceHandlingEmail,
+                                $campaignInformation,
+                                $phpMail
+                        );
+                
+            }
             try {
                 $smtpOptions = array();
                 if(isset($this->credentials->auth->smtpNoValidate) && $this->credentials->auth->smtpNoValidate) {
@@ -278,8 +308,8 @@ class EmailDeliveryBehavior extends CBehavior {
                     );
                 }
                 $phpMail->smtpConnect ($smtpOptions);
-            } catch (phpmailerException $e) {
-                $escalated = new phpmailerException (
+            } catch (PHPMailer\PHPMailer\Exception $e) {
+                $escalated = new PHPMailer\PHPMailer\Exception (
                     $e->getMessage (), PHPMailer::STOP_CRITICAL);
                 $this->status['code'] = '500';
                 $this->status['exception'] = $escalated;
@@ -287,7 +317,7 @@ class EmailDeliveryBehavior extends CBehavior {
                 return $this->status;
             }
         }
-
+       
         try{
             $this->addEmailAddresses($phpMail, $addresses);
 
@@ -342,7 +372,7 @@ class EmailDeliveryBehavior extends CBehavior {
             $this->status['code'] = '200';
             $this->status['exception'] = null;
             $this->status['message'] = Yii::t('app', 'Email Sent!');
-        }catch (phpmailerException $e){
+        }catch (PHPMailer\PHPMailer\Exception $e){
             // Catch PHPMailer specific exceptions for pretty error printing
             $this->status['code'] = '500';
             $this->status['exception'] = $e;
@@ -371,6 +401,264 @@ class EmailDeliveryBehavior extends CBehavior {
         }
     }
 
+    
+    private function sendWithOutlookOauth2(
+        $addresses,
+        $subject,
+        $message,
+        $attachments = array(),
+        $unsubLink = null,
+        $bounceHandlingEmail = null,
+        $campaignInformation = array(),
+        $phpMail
+        ){
+        //load in the graph libary
+        //require_once(Yii::app()->basePath.'/components/vendor/autoload.php');
+        //require_once(
+        //        realpath(Yii::app()->basePath.'/components/phpMailer/src/OAuth.php'));
+        //require_once(
+        //        realpath(Yii::app()->basePath.'/components/phpMailer/src/OAuth.php'));
+        //foreach (glob(Yii::app()->basePath."/components/MicrosoftGraphSDK/*.php") as $filename)
+            //{
+            //    require_once(
+            //    realpath($filename));
+            //}
+            //require_once(
+            //    realpath(Yii::app()->basePath. "/components/MicrosoftGraphSDK/msgraph-sdk-php-dev/src/Graph.php"));
+        require_once(Yii::app()->basePath.'/components/vendor/autoload.php');
+        $graph = new Microsoft\Graph\Graph();
+        $refTok = $this->credentials->auth->refreshToken;
+        $client = new OutlookAuthenticatorOauth2('MailBox');
+        $accessToken = $client->getAccessToken($this->credentials);
+        //printR($accessToken,1);
+        //$accessToken = $this->credentials->auth->accessToken;
+
+        $graph->setAccessToken($accessToken);
+        $sendEmailAddress =  $this->credentials->auth->email;
+        $sendEmailName = $this->credentials->auth->senderName;
+        $toAddresses = array();
+        
+
+        //have to convert to array for graph api
+        foreach($addresses['to'] as $addy){
+            $toAddresses[] = array( "emailAddress" => array(
+                           "name" => $addy[0],
+                           "address" => $addy[1]
+
+                  	));
+        }
+        try{
+            $mailBody = array( "Message" => array(
+                                    "subject" => $subject,
+                                    "body" => array(
+                                        "contentType" => "html",
+                                        "content" => $message
+                                    ),
+                          "sender" => array(
+                              "emailAddress" => array(
+                                  "name" => $sendEmailName,
+                                  "address" => $sendEmailAddress
+                              )
+                          ),
+                          "from" => array(
+                              "emailAddress" => array(
+                                      "name" => $sendEmailName,
+                                      "address" => $sendEmailAddress
+                              )
+                            ),
+                            "toRecipients" =>$toAddresses,
+                            "attachments" => $this->makeAttachmentForOutlook($attachments,$phpMail),
+                   )
+            );
+
+            $return = $graph->createRequest("POST", "/me/sendMail")
+                 ->attachBody($mailBody)
+                  ->execute();
+
+            $this->status['code'] = '200';
+            $this->status['exception'] = null;
+            $this->status['message'] = Yii::t('app', 'Email Sent!');
+        }catch (PHPMailer\PHPMailer\Exception $e){
+            // Catch PHPMailer specific exceptions for pretty error printing
+            $this->status['code'] = '500';
+            $this->status['exception'] = $e;
+            $this->status['message'] = $phpMail->ErrorInfo." ".$e->getFile()." L".$e->getLine();
+        }catch (Exception $e){
+            $this->status['code'] = '500';
+            $this->status['exception'] = $e;
+            $this->status['message'] = $e->getMessage()." ".$e->getFile()." L".$e->getLine();
+        }
+        return $this->status;
+    }
+    
+    
+    //function to put the attachemts into an array for outlook sending
+    private function makeAttachmentForOutlook($attachments,$phpMail){
+        $attachArray = array();
+        if(empty($attachments))return $attachArray;
+        foreach($attachments as $att){
+            $path = '';
+
+            $type = $att['type'];
+            switch ($type) {
+                case 'temp': // stored as a temp file?
+                    $path = 'uploads/protected/media/temp/'.$att['folder'].'/'.
+                         $att['filename'];
+                            break;
+                case 'media': // stored in media library
+                            $path = 'uploads/protected/media/'.$att['folder'].'/'.
+                                $att['filename'];
+                            break;
+                         
+                case 'emailInboxes':
+
+                            break;
+                         
+                default:
+                            throw new CException ('Invalid attachment type');
+            }
+            $fileType = PHPMailer\PHPMailer\PHPMailer::filenameToType($path);
+            $file_buffer = file_get_contents($path);
+            $attachArray[] = array(
+                "@odata.type" => "#microsoft.graph.fileAttachment",  
+                "name" => $att['filename'],
+                "contentBytes"=> base64_encode($file_buffer),
+                'contentType' => $fileType,
+            );
+        }
+        return $attachArray;
+        
+    }
+    
+    
+    private function sendWithGoogleOauth2(
+        $addresses,
+        $subject,
+        $message,
+        $attachments = array(),
+        $unsubLink = null,
+        $bounceHandlingEmail = null,
+        $campaignInformation = array(),
+        $phpMail
+        ){
+        
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/PHPMailer.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/SMTP.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/Exception.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/OAuth.php'));
+
+        $phpMail->Host = 'smtp.gmail.com';
+
+
+
+        //Set AuthType to use XOAUTH2
+        $phpMail->AuthType = 'XOAUTH2';
+        //foreach (glob(Yii::app()->basePath."/components/vendor/*.php") as $filename)
+        //    {
+        //     require_once(
+        //    realpath($filename));
+        //    }
+        //require_once(
+        //        realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-client/src/Provider/AbstractProvider.php'));
+        //require_once(
+        //        realpath(Yii::app()->basePath.'/components/vendor/league/oauth2-google/src/Provider/Google.php'));
+                        require_once(Yii::app()->basePath.'/components/vendor/autoload.php');
+        $credGoId = Yii::app()->settings->googleCredentialsId;
+        $GoCredentials = Credentials::model ()->findByPk ($credGoId);
+        $params = [
+            'clientId' => $GoCredentials->auth->clientId,
+            'clientSecret' =>  $GoCredentials->auth->clientSecret,
+        ];
+        $provider = new League\OAuth2\Client\Provider\Google($params);
+        $FromAdd = $this->from['address'];
+        
+        $phpMail->setOAuth(
+            new PHPMailer\PHPMailer\OAuth(
+                [
+                    'provider' => $provider,
+                    'clientId' => $GoCredentials->auth->clientId,
+                    'clientSecret' => $GoCredentials->auth->clientSecret,
+                    'refreshToken' => $this->credentials->auth->refreshToken,
+                    'userName' => $FromAdd,
+                ]
+            )
+        );
+        
+        
+        
+        
+        try{
+            $this->addEmailAddresses($phpMail, $addresses);
+
+            $phpMail->Subject = $subject;
+            $phpMail->bounceAccount = $bounceHandlingEmail;
+            $phpMail->bounceInfo = $campaignInformation;
+            // $phpMail->AltBody = $message;
+            $phpMail->MsgHTML($message);
+            // $phpMail->Body = $message;
+            // add attachments, if any
+            if($attachments){
+                foreach($attachments as $attachment){
+                    $type = $attachment['type'];
+                    switch ($type) {
+                        case 'temp': // stored as a temp file?
+                            $file = 'uploads/protected/media/temp/'.$attachment['folder'].'/'.
+                                $attachment['filename'];
+                            if(file_exists($file)) // check file exists
+                                if ($this->validateFileSize (filesize ($file))) {
+                                    $phpMail->AddAttachment($file);
+                                }
+                            break;
+                        case 'media': // stored in media library
+                            $file = 'uploads/protected/media/'.$attachment['folder'].'/'.
+                                $attachment['filename'];
+                            if(file_exists($file)) // check file exists
+                                if ($this->validateFileSize (filesize ($file))) {
+                                    $phpMail->AddAttachment($file);
+                                }
+                            break;
+                         
+                        case 'emailInboxes':
+                            if ($this->validateFileSize (intval ($attachment['size']))) {
+                                $phpMail->addStringAttachment (
+                                    $attachment['string'], $attachment['filename'], 
+                                    $attachment['encoding'], $attachment['mimeType'], 'attachment');
+                            }
+                            break;
+                         
+                        default:
+                            throw new CException ('Invalid attachment type');
+                    }
+                }
+            }
+
+            // Add the List-Unsubscribe header if enabled and an unsubscribe link is provided
+            if (Yii::app()->settings->enableUnsubscribeHeader && !empty($unsubLink)) {
+                $phpMail->AddCustomHeader ('List-Unsubscribe:<'.$unsubLink.'>');
+            }
+            $phpMail->Send();
+
+            $this->status['code'] = '200';
+            $this->status['exception'] = null;
+            $this->status['message'] = Yii::t('app', 'Email Sent!');
+        }catch (PHPMailer\PHPMailer\Exception $e){
+            // Catch PHPMailer specific exceptions for pretty error printing
+            $this->status['code'] = '500';
+            $this->status['exception'] = $e;
+            $this->status['message'] = $phpMail->ErrorInfo." ".$e->getFile()." L".$e->getLine();
+        }catch (Exception $e){
+            $this->status['code'] = '500';
+            $this->status['exception'] = $e;
+            $this->status['message'] = $e->getMessage()." ".$e->getFile()." L".$e->getLine();
+        }
+        return $this->status;
+        
+    }
+    
     /**
      * Getter for {@link credentials}
      * returns Credentials
@@ -442,10 +730,14 @@ class EmailDeliveryBehavior extends CBehavior {
     public function getMailer(){
         if(!isset($this->_mailer)){
             require_once(
-                realpath(Yii::app()->basePath.'/components/phpMailer/PHPMailerAutoload.php'));
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/PHPMailer.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/SMTP.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/Exception.php'));
 
             // the true param means it will throw exceptions on errors, which we need to catch
-            $phpMail = new PHPMailer(true); 
+            $phpMail = new PHPMailer\PHPMailer\PHPMailer; 
             $phpMail->CharSet = 'utf-8';
 
             $cred = $this->credentials;
@@ -517,11 +809,12 @@ class EmailDeliveryBehavior extends CBehavior {
      * Retrieve the MIME-encoded message of the email
      */
     public function getSentMIMEMessage() {
+       
         try {
             $phpMail = $this->mailer;
-        } catch (phpmailerException $e) {
+        } catch (PHPMailer\PHPMailer\Exception $e) {
             // escalate error to force campaigns to halt
-            $escalated = new phpmailerException (
+            $escalated = new PHPMailer\PHPMailer\Exception (
                 $e->getMessage (), PHPMailer::STOP_CRITICAL);
             $this->status['code'] = '500';
             $this->status['exception'] = $escalated;
@@ -569,9 +862,13 @@ class EmailDeliveryBehavior extends CBehavior {
     }
 
     public function testUserCredentials($email, $password, $server, $port, $security, $smtpNoValidate) {
-        require_once(
-            realpath(Yii::app()->basePath.'/components/phpMailer/PHPMailerAutoload.php'));
-        $phpMail = new PHPMailer(true);
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/PHPMailer.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/SMTP.php'));
+            require_once(
+                realpath(Yii::app()->basePath.'/components/phpMailer/src/Exception.php'));
+        $phpMail = new PHPMailer\PHPMailer\PHPMailer;
 
         $phpMail->isSMTP();
         $phpMail->SMTPAuth = true;
@@ -590,10 +887,10 @@ class EmailDeliveryBehavior extends CBehavior {
                 ),
             );
         }
-
+       
         try {
             $validCredentials = $phpMail->SmtpConnect($smtpOptions);
-        } catch(phpmailerException $error) {
+        } catch(PHPMailer\PHPMailer\Exception $error) {
             $validCredentials = false;
         }
         return $validCredentials;
