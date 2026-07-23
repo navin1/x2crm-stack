@@ -148,40 +148,21 @@ class WebFormAction extends CAction {
                 }
 
 
-                if ($model->asa('DuplicateBehavior') && $model->checkForDuplicates()) {
-                    $duplicates = $model->getDuplicates();
-                    $oldest = $duplicates[0];
-                }
-
-                if (Yii::app()->settings->enableFingerprinting && isset($_POST['fingerprint']) &&
-                        isset($extractedParams['fingerprintDetection']) && $extractedParams['fingerprintDetection']) {
-                    $attributes = (isset($_POST['fingerprintAttributes'])) ?
-                            json_decode($_POST['fingerprintAttributes'], true) : array();
-
-                    $anonContact = AnonContact::model()
-                            ->findByFingerprint($_POST['fingerprint'], $attributes);
-
-                    // if there's not an anonyomous contact, then the fingerprint match
-                    // was for an actual contact.
-                    if ($anonContact !== null) {
-                        if ($model->isNewRecord) {
-                            // save new contact for subsequent update() when merging AnonContact
-                            $model->save();
-                        }
-                        $model->mergeWithAnonContact($anonContact);
-                    } else {
-                        $fingerprint = Fingerprint::model()->findByAttributes(array(
-                            'fingerprint' => $_POST['fingerprint'],
-                        ));
-                        if (is_null($fingerprint)) {
-                            $model->setFingerprint($_POST['fingerprint'], $attributes);
-                        } else if ($fingerprint->anonymous === '0') {
-                            $oldest = X2Model::model('Contacts')->findByAttributes(array(
-                                'fingerprintId' => $fingerprint->id,
-                            ));
-                        }
-                    }
-                }
+                // Deliberately NOT running X2CRM's stock duplicate-detection or
+                // browser-fingerprint visitor-matching here — both merge the
+                // current submission's data INTO an existing Contact record,
+                // overwriting its fields with whatever this submission says.
+                // Confirmed live: fingerprint matching identifies "the same
+                // visitor" purely by browser/device characteristics, not by
+                // the submitted name/email, so two different people filling
+                // out this form from the same browser (a shared kiosk, the
+                // same dev machine during testing, etc.) silently overwrite
+                // each other's Contact — verified via x2_changelog showing a
+                // contact's name/email flip back and forth between two
+                // unrelated identities across two real submissions. Per
+                // explicit choice: every submission here creates its own new
+                // Contact; any actual duplicate cleanup happens manually
+                // later instead.
 
                 // Merge in previous fields if an existing contact is located by duplicate
                 // detection or fingerprinting
