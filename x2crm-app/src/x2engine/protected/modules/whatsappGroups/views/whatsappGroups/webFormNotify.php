@@ -49,6 +49,8 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                 <th>Pracharak</th>
                                 <th>WhatsApp Group</th>
                                 <th>Actions</th>
+                                <th>Created On</th>
+                                <th>Updated On</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -89,11 +91,13 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                         <?php endif; ?>
                                     </td>
                                     <td class="actions-cell">
-                                        <?php echo CHtml::link('View', array('webFormNotifyView', 'webFormId' => $f['id']), array('class' => 'x2-button')); ?>
+                                        <?php echo CHtml::link('View', array('webFormNotifyView', 'webFormId' => $f['id']), array('class' => 'x2-button blue')); ?>
                                         <button type="button" class="btn btn-sm btn-default webform-delete-btn"
                                                 data-id="<?php echo (int) $f['id']; ?>"
                                                 data-name="<?php echo CHtml::encode($f['name']); ?>">Delete</button>
                                     </td>
+                                    <td><?php echo !empty($f['createDate']) ? date('M j, Y', $f['createDate']) : '—'; ?></td>
+                                    <td><?php echo !empty($f['lastUpdated']) ? date('M j, Y', $f['lastUpdated']) : '—'; ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

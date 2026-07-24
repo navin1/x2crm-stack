@@ -50,7 +50,7 @@
             </div>
         </div>
 
-        <div class="btn-group" style="margin-bottom: 15px;">
+        <div class="btn-group" style="margin-bottom: 15px; padding-left: 15px;">
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
             <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
             <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
@@ -59,15 +59,18 @@
         </div>
 
         <?php if (!empty($groups)): ?>
+            <div class="panel panel-default">
+                <div class="panel-body">
             <table class="table table-striped table-hover">
                 <thead>
                     <tr>
                         <th>Group Name</th>
                         <th>Members</th>
-                        <th>Linked List</th>
+                        <th>Linked Contact List</th>
                         <th>Synced</th>
-                        <th>Created</th>
                         <th>Actions</th>
+                        <th>Last Synced</th>
+                        <th>Created</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -94,9 +97,8 @@
                                     <span class="label label-warning">No</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo date('M j, Y', strtotime($group['createdAt'])); ?></td>
                             <td class="actions-cell">
-                                <?php echo CHtml::link('View', array('view', 'groupId' => $group['groupId']), array('class' => 'x2-button')); ?>
+                                <?php echo CHtml::link('View', array('view', 'groupId' => $group['groupId']), array('class' => 'x2-button blue')); ?>
                                 <?php echo CHtml::link('Delete', '#', array(
                                     'class' => 'x2-button urgent',
                                     'submit' => array('delete', 'groupId' => $group['groupId']),
@@ -104,10 +106,20 @@
                                     'confirm' => "Delete \"" . CHtml::encode($group['groupName']) . "\"? WhatsApp has no way to delete a group for everyone — this leaves the group and stops tracking it in X2CRM.",
                                 )); ?>
                             </td>
+                            <td>
+                                <?php if (!empty($group['lastSyncedAt'])): ?>
+                                    <?php echo date('M j, Y g:i A', strtotime($group['lastSyncedAt'])); ?>
+                                <?php else: ?>
+                                    <span class="text-muted">Never</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo date('M j, Y g:i A', strtotime($group['createdAt'])); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
+                </div>
+            </div>
         <?php else: ?>
             <div class="alert alert-info">
                 No WhatsApp groups found. <?php echo CHtml::link('Create one', array('create')); ?> or <?php echo CHtml::link('sync from WhatsApp', array('sync')); ?>.
@@ -178,14 +190,14 @@
     .label-warning { background-color: #e0a800; }
     .label-danger { background-color: #dc3545; }
     .label-default { background-color: #6c757d; }
-    .panel { border: 1px solid #ddd; margin-bottom: 20px; }
+    .panel { border: 1px solid #ddd; margin: 0 15px 20px; }
     .panel-body { padding: 15px; }
     .wa-status-dl { margin: 0 0 12px; overflow: hidden; }
     .wa-status-dl dt { float: left; clear: left; width: 220px; font-weight: 600; }
     .wa-status-dl dd { margin-left: 220px; margin-bottom: 8px; }
     .alert {
         padding: 12px 15px;
-        margin-bottom: 20px;
+        margin: 0 15px 20px;
         border: 1px solid transparent;
         border-radius: 4px;
     }

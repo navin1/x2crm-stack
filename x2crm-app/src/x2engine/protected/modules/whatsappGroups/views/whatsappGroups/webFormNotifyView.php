@@ -32,6 +32,12 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
             <div class="panel-heading">Web Lead Form Details</div>
             <div class="panel-body">
                 <dl class="dl-horizontal">
+                    <dt>Created On:</dt>
+                    <dd><?php echo !empty($form['createDate']) ? date('M j, Y g:i A', $form['createDate']) : '—'; ?></dd>
+
+                    <dt>Updated On:</dt>
+                    <dd><?php echo !empty($form['lastUpdated']) ? date('M j, Y g:i A', $form['lastUpdated']) : '—'; ?></dd>
+
                     <dt>Iframe URL:</dt>
                     <dd><code><?php echo CHtml::encode($iframeUrl); ?></code></dd>
 
