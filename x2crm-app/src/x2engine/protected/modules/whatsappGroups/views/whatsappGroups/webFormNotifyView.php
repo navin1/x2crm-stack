@@ -35,11 +35,44 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
                     <dt>Iframe URL:</dt>
                     <dd><code><?php echo CHtml::encode($iframeUrl); ?></code></dd>
 
+                    <dt>Embed Code:</dt>
+                    <dd>
+                        <input type="text" readonly id="embed-code-input" class="form-control"
+                               style="font-family: monospace; max-width: 600px;"
+                               value='<?php echo CHtml::encode(
+                                   '<iframe src="' . $iframeUrl . '" width="100%" height="500" ' .
+                                   'frameborder="0" allowtransparency="true" scrolling="auto"></iframe>'
+                               ); ?>'>
+                        <div class="text-muted" style="margin-top: 4px;">
+                            Paste this into a page on any domain to embed the live form there.
+                        </div>
+                    </dd>
+
                     <dt>Live Preview:</dt>
                     <dd>
                         <iframe src="<?php echo CHtml::encode($iframeUrl); ?>" frameborder="0"
                                 allowtransparency="true" scrolling="auto"
                                 style="width: 100%; max-width: 420px; height: 480px; border: 1px solid #ddd;"></iframe>
+                    </dd>
+
+                    <dt>Custom URL:</dt>
+                    <dd>
+                        <?php $customUrlForm = $this->beginWidget('CActiveForm', array(
+                            'action' => array('saveCustomUrl'),
+                            'method' => 'POST',
+                        )); ?>
+                            <input type="hidden" name="webFormId" value="<?php echo (int) $form['id']; ?>">
+                            <input type="url" name="customUrl" class="form-control"
+                                   style="max-width: 400px; display: inline-block;"
+                                   placeholder="https://your-domain.com/page-that-embeds-this-form"
+                                   value="<?php echo CHtml::encode($form['customUrl']); ?>">
+                            <?php echo CHtml::submitButton('Save', array('class' => 'x2-button')); ?>
+                        <?php $this->endWidget(); ?>
+                        <div class="text-muted" style="margin-top: 4px;">
+                            If you embed the code above on your own domain, save that page's URL here —
+                            the short link and QR code below will point to it instead of the raw iframe URL.
+                            Leave blank and save to revert to the iframe URL.
+                        </div>
                     </dd>
 
                     <dt>Short Link:</dt>
@@ -49,12 +82,15 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
                         <?php else: ?>
                             <span class="text-muted">Unavailable (tinyurl.com request failed or is unreachable)</span>
                         <?php endif; ?>
+                        <?php if (!empty($form['customUrl'])): ?>
+                            <div class="text-muted" style="margin-top: 4px;">Points to your custom URL, not the raw iframe URL.</div>
+                        <?php endif; ?>
                     </dd>
 
                     <dt>QR Code:</dt>
                     <dd>
-                        <img src="<?php echo CHtml::encode($this->createUrl('qrForUrl', array('url' => $iframeUrl))); ?>"
-                             alt="QR code for iframe URL" style="width: 160px; height: 160px;">
+                        <img src="<?php echo CHtml::encode($this->createUrl('qrForUrl', array('url' => $targetUrl))); ?>"
+                             alt="QR code" style="width: 160px; height: 160px;">
                     </dd>
 
                     <dt>Status:</dt>
@@ -151,6 +187,11 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
 
 <script>
 (function () {
+    var embedInput = document.getElementById('embed-code-input');
+    if (embedInput) {
+        embedInput.addEventListener('focus', function () { this.select(); });
+    }
+
     var deleteUrl = <?php echo CJSON::encode($deleteWebFormUrl); ?>;
     var listUrl = <?php echo CJSON::encode($this->createUrl('webFormNotify')); ?>;
     document.querySelectorAll('.webform-delete-btn').forEach(function (btn) {

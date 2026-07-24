@@ -897,19 +897,28 @@ class WhatsappGroupsController extends x2base {
         $iframeUrl = rtrim(Yii::app()->request->getHostInfo(), '/') .
             '/index.php/contacts/contacts/weblead?webFormId=' . $form['id'];
 
-        // Cache the short link once per form — same tinyurl.com lookup
-        // x2_custom_lead_forms already uses, just without the WhatsApp
-        // message side-effect that endpoint normally sends.
+        // If a custom URL is set (e.g. a page on the admin's own domain
+        // that embeds this form's iframe), the short link and QR code
+        // target THAT instead of the raw X2CRM iframe URL — the embed
+        // code below always uses $iframeUrl regardless, since that's the
+        // actual working form endpoint to embed.
+        $targetUrl = !empty($form['customUrl']) ? $form['customUrl'] : $iframeUrl;
+
+        // Cache the short link once per (form, target URL) pair — same
+        // tinyurl.com lookup x2_custom_lead_forms already uses, just
+        // without the WhatsApp message side-effect that endpoint normally
+        // sends. actionSaveCustomUrl() clears tinyUrl whenever customUrl
+        // changes, so this re-fires for the new target on the next view.
         if (empty($form['tinyUrl'])) {
             try {
-                $result = $this->callWaHub('GET', '/admin/tinyurl?url=' . urlencode($iframeUrl));
+                $result = $this->callWaHub('GET', '/admin/tinyurl?url=' . urlencode($targetUrl));
                 if (!empty($result['tinyUrl'])) {
                     Yii::app()->db->createCommand()->update('x2_web_forms',
                         array('tinyUrl' => $result['tinyUrl']), 'id=:id', array(':id' => $webFormId));
                     $form['tinyUrl'] = $result['tinyUrl'];
                 }
             } catch (Exception $e) {
-                // Non-fatal — page still renders with just the raw iframe URL.
+                // Non-fatal — page still renders with just the raw target URL.
             }
         }
 
@@ -934,12 +943,50 @@ class WhatsappGroupsController extends x2base {
         $this->render('webFormNotifyView', array(
             'form' => $form,
             'iframeUrl' => $iframeUrl,
+            'targetUrl' => $targetUrl,
             'pracharaks' => $pracharaks === null ? array() : $pracharaks,
             'hasPracharakList' => $pracharaks !== null,
             'groups' => $groups,
             'currentPracharak' => $currentPracharak === false ? '' : $currentPracharak,
             'currentGroups' => $currentGroups,
         ));
+    }
+
+    /**
+     * Sets or clears a custom URL for one Web Lead Form (e.g. a page on
+     * the admin's own domain that embeds this form's iframe) — the short
+     * link and QR code on webFormNotifyView target this instead of the
+     * raw X2CRM iframe URL once set. Clears the cached tinyUrl so it
+     * regenerates for the new target on the next view.
+     */
+    public function actionSaveCustomUrl() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+        $this->ensureWebFormManagementColumns();
+
+        $webFormId = (int) Yii::app()->request->getPost('webFormId');
+        $customUrl = trim(Yii::app()->request->getPost('customUrl', ''));
+
+        try {
+            if ($customUrl !== '' && !filter_var($customUrl, FILTER_VALIDATE_URL)) {
+                throw new CException('That doesn\'t look like a valid URL.');
+            }
+            Yii::app()->db->createCommand()->update('x2_web_forms', array(
+                'customUrl' => $customUrl !== '' ? $customUrl : null,
+                'tinyUrl' => null,
+            ), 'id=:id', array(':id' => $webFormId));
+            Yii::app()->user->setFlash('success', $customUrl !== ''
+                ? 'Custom URL saved — short link and QR code will regenerate for it.'
+                : 'Custom URL cleared — short link and QR code will regenerate for the iframe URL.');
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $webFormId));
     }
 
     /**
@@ -1088,6 +1135,13 @@ class WhatsappGroupsController extends x2base {
         )->queryScalar();
         if (!$hasTinyUrl) {
             $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN tinyUrl VARCHAR(255) NULL")->execute();
+        }
+        $hasCustomUrl = $db->createCommand(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS " .
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'x2_web_forms' AND COLUMN_NAME = 'customUrl'"
+        )->queryScalar();
+        if (!$hasCustomUrl) {
+            $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN customUrl VARCHAR(500) NULL")->execute();
         }
     }
 
