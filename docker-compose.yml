@@ -50,7 +50,15 @@ services:
     volumes:
       - x2crm_code:/var/www/html
     ports:
-      - "8080:80"
+      # Bound to loopback only — this port exists for direct-to-Apache
+      # access (bypassing Caddy) for local debugging convenience. "8080:80"
+      # (bound to all interfaces) published it to the public internet with
+      # none of Caddy's protections — no rate limiting on the public
+      # weblead-submission route, no TLS. 127.0.0.1 keeps it reachable as
+      # http://localhost:8080 both from Docker Desktop on a laptop and via
+      # `ssh -L 8080:localhost:8080` on a server, without exposing it
+      # beyond that host.
+      - "127.0.0.1:8080:80"
     networks:
       - x2crm_net
 
