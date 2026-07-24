@@ -155,6 +155,7 @@ if ($type === 'service') {
  xml:lang="<?php echo Yii::app()->language; ?>" lang="<?php echo Yii::app()->language; ?>">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="language" content="<?php echo Yii::app()->language; ?>" />
 <title><?php echo CHtml::encode($this->pageTitle); ?></title>
 <?php $this->renderGaCode('public'); ?>
@@ -280,6 +281,19 @@ body {
     box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
     <?php endif; ?>
 }
+<?php if (!isset ($iframeHeight)): ?>
+/* On a phone-width viewport, max-width:500px stops constraining
+   anything (the screen itself is already narrower), so body would
+   otherwise span edge-to-edge with no room for the rounded corners/
+   shadow above to actually read as a floating card. A small gutter
+   keeps the same look that's already correct on desktop. */
+@media (max-width: 540px) {
+    body {
+        max-width: calc(100% - 24px);
+        margin: 12px auto;
+    }
+}
+<?php endif; ?>
 .web-form-logo {
     display: block;
     margin: 0 auto 18px;
@@ -332,7 +346,12 @@ label {
 input, textarea, select {
     border: 1px solid #d0d5dd;
     font-family: inherit;
-    font-size: 13px;
+    /* 16px, not 13px: anything smaller makes iOS Safari auto-zoom the
+       whole page in when a field is focused (a long-standing iOS
+       behavior, not a bug in this page) — this is the single most
+       common reason a form "feels unprofessional" specifically on
+       phones, where every other browser is unaffected either way. */
+    font-size: 16px;
     color: #1d2939;
     background-color: #ffffff;
     transition: border-color .15s ease, box-shadow .15s ease;
@@ -363,6 +382,32 @@ input[type="text"] {
 input[type="file"] {
     width: 100%;
     border: none;
+}
+select {
+    /* Previously fell back to the browser's own tiny default sizing —
+       this had never matched input[type=text]/textarea above, since
+       nothing here set its width/padding/radius. Custom chevron replaces
+       the native dropdown arrow removed by turning off the platform
+       appearance, needed to apply the same padding/height as text
+       fields consistently across browsers. */
+    width: 100%;
+    padding: 9px 34px 9px 10px;
+    border-radius: 6px;
+    line-height: 1.4;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23667085' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+/* Comfortable tap targets on touch devices — inputs/selects/the submit
+   button all clear the ~44px minimum recommended for accessible touch
+   targets once this is combined with the padding rules above. */
+input[type="text"], input[type="email"], input[type="tel"], input[type="url"],
+input[type="number"], input[type="password"], select, textarea, #submit {
+    min-height: 44px;
+    box-sizing: border-box;
 }
 #captcha-image {
     margin-left: auto;

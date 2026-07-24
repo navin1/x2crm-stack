@@ -49,6 +49,7 @@ Yii::app()->params->profile = Profile::model()->findByPk(1);
  lang="<?php echo Yii::app()->language; ?>">
 <head>
 <meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="language" content="<?php echo Yii::app()->language; ?>" />
 <title><?php echo CHtml::encode($this->pageTitle); ?></title>
 
@@ -73,6 +74,12 @@ body {
     border: 1px solid #e4e7ec;
     border-radius: 10px;
     box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+@media (max-width: 460px) {
+    body {
+        max-width: calc(100% - 24px);
+        margin: 20px auto;
+    }
 }
 .web-form-logo {
     display: block;
