@@ -44,9 +44,10 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                     <table class="table table-striped table-hover">
                         <thead>
                             <tr>
-                                <th>Name</th>
+                                <th>WebForm Name</th>
                                 <th>Status</th>
-                                <th>Notifications</th>
+                                <th>Pracharak</th>
+                                <th>WhatsApp Group</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -54,8 +55,13 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                             <?php foreach ($forms as $f):
                                 $isScheduledPast = !empty($f['deactivateAt']) && $f['deactivateAt'] <= time();
                                 $isActive = !empty($f['active']) && !$isScheduledPast;
-                                $hasPracharak = isset($notifyMap[$f['id']]) && $notifyMap[$f['id']] !== '';
-                                $groupCount = isset($groupNotifyMap[$f['id']]) ? count($groupNotifyMap[$f['id']]) : 0;
+                                $pracharakId = isset($notifyMap[$f['id']]) ? (string) $notifyMap[$f['id']] : '';
+                                $pracharakName = $pracharakId !== '' && isset($pracharaksById[$pracharakId])
+                                    ? $pracharaksById[$pracharakId] : null;
+                                $groupIds = isset($groupNotifyMap[$f['id']]) ? $groupNotifyMap[$f['id']] : array();
+                                $groupNames = array_map(function ($gid) use ($groupNamesById) {
+                                    return isset($groupNamesById[$gid]) ? $groupNamesById[$gid] : $gid;
+                                }, $groupIds);
                             ?>
                                 <tr id="webform-row-<?php echo (int) $f['id']; ?>">
                                     <td><strong><?php echo CHtml::encode($f['name']); ?></strong></td>
@@ -69,14 +75,15 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        Pracharak:
-                                        <span class="label <?php echo $hasPracharak ? 'label-success' : 'label-default'; ?>">
-                                            <?php echo $hasPracharak ? 'On' : 'Off'; ?>
-                                        </span>
-                                        &nbsp;
-                                        Groups:
-                                        <?php if ($groupCount > 0): ?>
-                                            <span class="label label-success"><?php echo $groupCount; ?> picked</span>
+                                        <?php if ($pracharakName): ?>
+                                            <?php echo CHtml::encode($pracharakName); ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">&mdash;</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($groupNames)): ?>
+                                            <?php echo CHtml::encode(implode(', ', $groupNames)); ?>
                                         <?php else: ?>
                                             <span class="text-muted">default pool</span>
                                         <?php endif; ?>

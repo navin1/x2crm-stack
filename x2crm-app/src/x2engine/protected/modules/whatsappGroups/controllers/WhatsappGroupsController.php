@@ -847,10 +847,28 @@ class WhatsappGroupsController extends x2base {
             $groupNotifyMap[$row['webFormId']][] = $row['groupId'];
         }
 
+        // Resolve pracharakId/groupId to display names for the list — the
+        // detail page (actionWebFormNotifyView) already does this per-form;
+        // here it's done once for every form shown.
+        $pracharaksById = array();
+        foreach (($this->getPracharakContacts() ?: array()) as $sp) {
+            $pracharaksById[(string) $sp['id']] = $sp['name'];
+        }
+        $groupNamesById = array();
+        try {
+            foreach ($this->callWaHub('GET', '/admin/groups') as $g) {
+                $groupNamesById[$g['groupId']] = $g['groupName'];
+            }
+        } catch (Exception $e) {
+            // Best-effort — group names just show as their raw id if wa-hub is unreachable.
+        }
+
         $this->render('webFormNotify', array(
             'forms' => $forms,
             'notifyMap' => $notifyMap,
             'groupNotifyMap' => $groupNotifyMap,
+            'pracharaksById' => $pracharaksById,
+            'groupNamesById' => $groupNamesById,
         ));
     }
 
