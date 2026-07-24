@@ -1143,8 +1143,13 @@ app.get('/messages', requireAdmin, async (req, res) => {
   }
 });
 
-// admin rate limiter: 10 requests per minute per IP
-const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false });
+// Admin rate limiter. This guards requireAdmin routes, which are only ever
+// called by the X2CRM app container over the internal Docker network (shared
+// secret, not public) — so every call shares one source IP. A low cap here
+// doesn't stop abuse, it just breaks normal browsing (e.g. one page load of
+// editNotifyTemplate alone makes 2 calls). Kept generous as a runaway-loop
+// safety net, not real throttling.
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false });
 
 // Admin purge endpoint (protected + rate-limited)
 app.post('/admin/purge', requireAdmin, adminLimiter, async (req, res) => {

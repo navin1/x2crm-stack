@@ -105,4 +105,5 @@
     .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .text-muted { color: #6c757d; }
+    #x2-layout-content { padding: 0 20px; }
 </style>

@@ -50,7 +50,7 @@
             </div>
         </div>
 
-        <div class="btn-group" style="margin-bottom: 15px; padding-left: 15px;">
+        <div class="btn-group" style="margin-bottom: 15px;">
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
             <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
             <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
@@ -190,17 +190,18 @@
     .label-warning { background-color: #e0a800; }
     .label-danger { background-color: #dc3545; }
     .label-default { background-color: #6c757d; }
-    .panel { border: 1px solid #ddd; margin: 0 15px 20px; }
+    .panel { border: 1px solid #ddd; margin: 0 0 20px; }
     .panel-body { padding: 15px; }
     .wa-status-dl { margin: 0 0 12px; overflow: hidden; }
     .wa-status-dl dt { float: left; clear: left; width: 220px; font-weight: 600; }
     .wa-status-dl dd { margin-left: 220px; margin-bottom: 8px; }
     .alert {
         padding: 12px 15px;
-        margin: 0 15px 20px;
+        margin: 0 0 20px;
         border: 1px solid transparent;
         border-radius: 4px;
     }
+    #x2-layout-content { padding: 0 20px; }
     .alert-success {
         color: #155724;
         background-color: #d4edda;

@@ -263,4 +263,5 @@
     .btn-default:hover {
         background-color: #e2e6ea;
     }
+    #x2-layout-content { padding: 0 20px; }
 </style>

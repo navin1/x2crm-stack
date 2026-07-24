@@ -245,4 +245,5 @@
     .text-muted {
         color: #6c757d;
     }
+    #x2-layout-content { padding: 0 20px; }
 </style>

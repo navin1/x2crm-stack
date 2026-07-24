@@ -328,4 +328,5 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
         vertical-align: middle;
         margin: 0 4px 4px 0 !important;
     }
+    #x2-layout-content { padding: 0 20px; }
 </style>

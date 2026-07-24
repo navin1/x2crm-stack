@@ -20,7 +20,8 @@
             </div>
         <?php endif; ?>
 
-        <div class="panel panel-default" style="max-width: 700px;">
+        <div class="notify-template-columns">
+        <div class="panel panel-default notify-template-left">
             <div class="panel-heading">Message template</div>
             <div class="panel-body">
                 <p class="text-muted">
@@ -96,6 +97,26 @@
                 <?php $this->endWidget(); ?>
             </div>
         </div>
+
+        <div class="panel panel-default notify-template-right">
+            <div class="panel-heading">Web Lead Form Preview</div>
+            <div class="panel-body">
+                <?php if ($selectedWebFormId): ?>
+                    <p class="text-muted">
+                        Live preview of <strong><?php echo CHtml::encode($selectedFormName); ?></strong> as a
+                        lead would see it.
+                    </p>
+                    <iframe src="<?php echo CHtml::encode($previewIframeUrl); ?>" frameborder="0"
+                        allowtransparency="true" scrolling="auto"></iframe>
+                <?php else: ?>
+                    <p class="text-muted">
+                        Select a specific form above (instead of the default) to see a live
+                        preview of it here.
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
+        </div>
     </div>
 </div>
 
@@ -117,4 +138,24 @@
     .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     textarea.form-control { width: 100%; box-sizing: border-box; }
+    .notify-template-columns { display: flex; gap: 20px; align-items: stretch; }
+    .notify-template-left { flex: 1 1 700px; max-width: 700px; display: flex; flex-direction: column; }
+    .notify-template-right { flex: 1 1 420px; max-width: 460px; display: flex; flex-direction: column; }
+    .notify-template-left .panel-body, .notify-template-right .panel-body {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+    .notify-template-right iframe {
+        flex: 1 1 auto;
+        width: 100%;
+        min-height: 300px;
+        border: 1px solid #ddd;
+    }
+    @media (max-width: 1200px) {
+        .notify-template-columns { flex-direction: column; }
+        .notify-template-left, .notify-template-right { max-width: 700px; width: 100%; }
+        .notify-template-right iframe { min-height: 480px; }
+    }
+    #x2-layout-content { padding: 0 20px; }
 </style>

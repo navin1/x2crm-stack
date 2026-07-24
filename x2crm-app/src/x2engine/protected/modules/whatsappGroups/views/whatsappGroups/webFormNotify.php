@@ -161,4 +161,5 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
     .text-muted { color: #6c757d; }
+    #x2-layout-content { padding: 0 20px; }
 </style>

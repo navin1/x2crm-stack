@@ -542,6 +542,14 @@ class WhatsappGroupsController extends x2base {
             }
         }
 
+        $previewIframeUrl = null;
+        $selectedFormName = null;
+        if ($selectedForm) {
+            $previewIframeUrl = rtrim(Yii::app()->request->getHostInfo(), '/') .
+                '/index.php/contacts/contacts/weblead?webFormId=' . $selectedForm['id'];
+            $selectedFormName = $selectedForm['name'];
+        }
+
         $this->render('notifyTemplate', array(
             'template' => $template,
             'forms' => $forms,
@@ -549,6 +557,8 @@ class WhatsappGroupsController extends x2base {
             'isCustom' => $isCustom,
             'groupNames' => $groupNames,
             'usingFallback' => $usingFallback,
+            'previewIframeUrl' => $previewIframeUrl,
+            'selectedFormName' => $selectedFormName,
         ));
     }
 
