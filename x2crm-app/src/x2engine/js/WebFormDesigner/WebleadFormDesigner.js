@@ -89,6 +89,10 @@ x2.WebleadFormDesigner = (function(){
             $('#leadSource').val (form.leadSource);
         }
 
+        if(typeof form.targetListId !== 'undefined') {
+            $('#targetListId').val (form.targetListId || '');
+        }
+
     };
 
     WebleadFormDesigner.prototype._init = function () {

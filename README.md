@@ -47,6 +47,41 @@ migratable between clouds, everything here is:
   builds vary slightly, and the placeholder path in `server.js` may need
   a small adjustment.
 
+## WhatsApp integration (wa-hub)
+
+A separate `wa_hub` service (Node.js + Baileys) pairs with one WhatsApp
+number and connects it to X2CRM's Web Lead Forms, all managed from
+**WhatsApp Groups** in the X2CRM admin UI:
+
+- **Group membership sync**: a WhatsApp group can be linked to an X2List
+  (static or dynamic); membership is reconciled to the list's live
+  criteria automatically every few minutes, or on demand via "Sync Now".
+- **Web Lead Form → List**: a Web Lead Form can be given a target static
+  list (`x2_web_forms.targetListId`) — every submission through that form
+  adds the new Contact to that list, which then flows into the group sync
+  above with no extra wiring.
+- **New-lead WhatsApp notifications**: per Web Lead Form, under **Web
+  Form Notifications**, pick which specific WhatsApp group(s) should get
+  a message for that form's leads (`wa_lead_notify_group_map`, keyed by
+  the form's `leadSource`) — if none are picked, it falls back to every
+  group with its own "New-lead notifications" toggle on. Under **Edit
+  New-Lead Message**, each form can also have its own custom message
+  template (`wa_lead_notify_form_template`), instead of the one shared
+  default.
+- wa-hub and X2CRM share the same MySQL database — the PHP controller
+  (`WhatsappGroupsController.php`) reads/writes wa-hub's own tables
+  directly via `Yii::app()->db` for plain config, and only calls wa-hub's
+  HTTP admin API (`callWaHub()`) for anything that needs the live
+  WhatsApp session (sending messages, creating/syncing groups). New
+  wa-hub tables must be created with `COLLATE=utf8mb4_general_ci`
+  explicitly — X2Engine's own tables use that collation, not MySQL 8's
+  `utf8mb4_0900_ai_ci` default, and joining across a mismatch fails with
+  "Illegal mix of collations".
+- If the paired WhatsApp session ever shows "logged out" in `docker logs
+  wa_hub` (a normal occurrence, not a bug), re-pair it from WhatsApp
+  Groups' "Manage connection / re-pair" link — no messages send until
+  this is done.
+
 ## Local-first, then migrate to any cloud
 
 The whole point of the Docker structure is that **local and cloud run the

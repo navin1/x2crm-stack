@@ -11,7 +11,7 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 <div id="x2-layout">
     <div id="x2-layout-content">
         <div class="page-title icon custom-module"><h2>Web Form Notifications</h2></div>
-        <p class="text-muted">
+        <p class="text-muted" style="padding-left: 54px;">
             Every form built at <a href="<?php echo CHtml::encode($this->createUrl('/marketing/marketing/webleadForm')); ?>">Marketing &gt; Web Lead Form</a>
             is listed below with its iframe embed URL. Pick a pracharak for a form and every
             submission through that form's iframe gets WhatsApped to them, usually within about a
@@ -19,7 +19,9 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
             You can change the assigned pracharak, activation state, or schedule at any time.
             The pracharak choices come from the Contacts in a Contact List named exactly
             <strong>Pracharak</strong> — add or remove someone there to change who's assignable
-            here.
+            here. Optionally pick specific WhatsApp groups to notify for a form under "Notify
+            WhatsApp Groups" — if none are picked, the form falls back to every group with its
+            own "New-lead notifications" toggle on (set from that group's own page).
         </p>
 
         <?php if (Yii::app()->user->hasFlash('success')): ?>
@@ -61,6 +63,7 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                         <th>Iframe URL</th>
                         <th>Status</th>
                         <th>Notify Pracharak</th>
+                        <th>Notify WhatsApp Groups</th>
                         <th>Manage</th>
                     </tr>
                 </thead>
@@ -83,11 +86,12 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                     <span class="label label-success">Active</span>
                                 <?php endif; ?>
                             </td>
+                            <?php $rowFormId = 'notify-form-' . (int) $f['id']; ?>
                             <td>
                                 <?php $rowForm = $this->beginWidget('CActiveForm', array(
                                     'action' => array('saveWebFormNotify'),
                                     'method' => 'POST',
-                                    'htmlOptions' => array('class' => 'notify-row'),
+                                    'htmlOptions' => array('class' => 'notify-row', 'id' => $rowFormId),
                                 )); ?>
                                     <input type="hidden" name="webFormId" value="<?php echo (int) $f['id']; ?>">
                                     <select name="pracharakId" class="form-control" style="max-width: 240px; display: inline-block;">
@@ -98,8 +102,27 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
-                                    <?php echo CHtml::submitButton('Save', array('class' => 'btn btn-sm btn-primary')); ?>
                                 <?php $this->endWidget(); ?>
+                            </td>
+                            <td>
+                                <?php
+                                // Lives outside the <form> above (a <form> can't validly span
+                                // two <td>s in the same row) but still submits with it via the
+                                // HTML5 form="" attribute, so one Save covers both selections.
+                                $selectedGroups = isset($groupNotifyMap[$f['id']]) ? $groupNotifyMap[$f['id']] : array();
+                                ?>
+                                <select name="groupIds[]" form="<?php echo $rowFormId; ?>" multiple
+                                        class="form-control" style="max-width: 220px; height: 76px;">
+                                    <?php foreach ($groups as $g): ?>
+                                        <option value="<?php echo CHtml::encode($g['groupId']); ?>"
+                                            <?php echo in_array($g['groupId'], $selectedGroups, true) ? ' selected' : ''; ?>>
+                                            <?php echo CHtml::encode($g['groupName']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php echo CHtml::submitButton('Save', array(
+                                    'class' => 'btn btn-sm btn-primary', 'form' => $rowFormId,
+                                )); ?>
                             </td>
                             <td class="actions-cell">
                                 <div class="actions-row">
@@ -189,7 +212,7 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
     .btn-success { background-color: #28a745; color: #fff; border-color: #28a745; }
     .btn-xs { padding: 3px 8px; font-size: 12px; }
     .table-scroll { overflow-x: auto; margin-bottom: 20px; }
-    .webform-notify-table { min-width: 1150px; border-collapse: separate; border-spacing: 0; }
+    .webform-notify-table { min-width: 1350px; border-collapse: separate; border-spacing: 0; }
     .webform-notify-table th,
     .webform-notify-table td { padding: 14px 16px; vertical-align: top; white-space: nowrap; }
     .webform-notify-table td.actions-cell { white-space: normal; }

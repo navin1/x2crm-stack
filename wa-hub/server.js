@@ -298,8 +298,8 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
         message: lead.backgroundInfo || '',
         state: lead.state || '',
         city: lead.city || '',
-      });
-      await notifyGroupsOfNewLead({ text: groupText });
+      }, leadSource);
+      await notifyGroupsOfNewLead({ text: groupText, leadSource });
     } catch (e) {
       console.warn('wa-hub: group new-lead broadcast failed:', e.message || e);
     }
@@ -336,9 +336,18 @@ const DEFAULT_LEAD_NOTIFY_TEMPLATE = [
 // Deliberately not a full templating engine (no conditionals/loops): this
 // single substitute-then-prune-empty-lines pass covers the one thing that
 // actually needed handling here.
-async function renderLeadNotifyTemplate(fields) {
-  const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
-  const template = (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE;
+async function renderLeadNotifyTemplate(fields, leadSource) {
+  let template = null;
+  if (leadSource) {
+    const [formRows] = await dbPool.execute(
+      'SELECT template FROM wa_lead_notify_form_template WHERE leadSource = ?', [leadSource]
+    );
+    if (formRows[0]) template = formRows[0].template;
+  }
+  if (template === null) {
+    const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
+    template = (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE;
+  }
 
   const substituted = template.replace(/\{\{(\w+)\}\}/g, (_match, key) =>
     Object.prototype.hasOwnProperty.call(fields, key) ? String(fields[key]) : ''
@@ -367,9 +376,20 @@ async function renderLeadNotifyTemplate(fields) {
 // bot's account must already be a member of a target group to post into
 // it — automatic for groups created via createWhatsAppGroup(), a manual
 // one-time add otherwise.
-async function notifyGroupsOfNewLead({ text }) {
+async function notifyGroupsOfNewLead({ text, leadSource }) {
   if (!sock || !isOpen || !dbPool) return;
-  const [groups] = await dbPool.execute('SELECT groupId FROM wa_groups WHERE notifyOnNewLead = 1');
+  let groups = [];
+  if (leadSource) {
+    const [mapped] = await dbPool.execute(
+      'SELECT groupId FROM wa_lead_notify_group_map WHERE leadSource = ?', [leadSource]
+    );
+    groups = mapped;
+  }
+  if (groups.length === 0) {
+    // No explicit per-form targeting configured for this form — fall back
+    // to the legacy blanket broadcast (unchanged behavior).
+    [groups] = await dbPool.execute('SELECT groupId FROM wa_groups WHERE notifyOnNewLead = 1');
+  }
   for (const g of groups) {
     await sock.sendMessage(g.groupId, { text });
   }
@@ -879,6 +899,33 @@ async function initDb() {
         updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+    // Per-form WhatsApp group targeting for the new-lead broadcast — when a
+    // leadSource has any rows here, notifyGroupsOfNewLead() sends only to
+    // these groups instead of the blanket wa_groups.notifyOnNewLead pool.
+    // Collation pinned to utf8mb4_general_ci (X2Engine's own convention,
+    // e.g. x2_web_forms.leadSource) rather than MySQL 8's utf8mb4_0900_ai_ci
+    // default — X2CRM's WhatsappGroupsController joins this table directly
+    // against x2_web_forms.leadSource, which errors ("Illegal mix of
+    // collations") if the two sides don't match.
+    await dbPool.execute(`
+      CREATE TABLE IF NOT EXISTS wa_lead_notify_group_map (
+        leadSource VARCHAR(100) NOT NULL,
+        groupId VARCHAR(100) NOT NULL,
+        createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (leadSource, groupId)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    `);
+    // Per-form override for the new-lead group broadcast wording. When a
+    // leadSource has a row here, renderLeadNotifyTemplate() uses it instead
+    // of the shared wa_lead_notify_template default (id=1). Same collation
+    // reasoning as wa_lead_notify_group_map above.
+    await dbPool.execute(`
+      CREATE TABLE IF NOT EXISTS wa_lead_notify_form_template (
+        leadSource VARCHAR(100) PRIMARY KEY,
+        template TEXT NOT NULL,
+        updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    `);
     // Note: admin users are managed by X2CRM's `x2_users` table. No local admin users table.
     console.log('wa-hub: DB pool initialized and tables ensured');
   } catch (err) {
@@ -1323,22 +1370,59 @@ app.post('/admin/groups/:groupId/auto-sync', requireAdmin, adminLimiter, async (
 // broadcast (see renderLeadNotifyTemplate())
 app.get('/admin/lead-notify-template', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
-    res.json({ template: (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE });
+    const leadSource = req.query.leadSource || null;
+    let template = null;
+    let isCustom = false;
+    if (leadSource) {
+      const [formRows] = await dbPool.execute(
+        'SELECT template FROM wa_lead_notify_form_template WHERE leadSource = ?', [leadSource]
+      );
+      if (formRows[0]) { template = formRows[0].template; isCustom = true; }
+    }
+    if (template === null) {
+      const [rows] = await dbPool.execute('SELECT template FROM wa_lead_notify_template WHERE id = 1');
+      template = (rows[0] && rows[0].template) || DEFAULT_LEAD_NOTIFY_TEMPLATE;
+    }
+    res.json({ template, isCustom });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
 });
 
 // POST /admin/lead-notify-template - Save new wording for the new-lead group
-// broadcast
+// broadcast. Body: { template, leadSource? } — leadSource omitted/null saves
+// the shared default; present upserts a per-form override.
 app.post('/admin/lead-notify-template', requireAdmin, adminLimiter, async (req, res) => {
   const template = ((req.body || {}).template || '').trim();
+  const leadSource = (req.body || {}).leadSource || null;
   if (!template) return res.status(400).json({ error: 'template is required' });
 
   try {
-    await dbPool.execute('UPDATE wa_lead_notify_template SET template = ? WHERE id = 1', [template]);
-    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'update_lead_notify_template', params: {}, success: true });
+    if (leadSource) {
+      await dbPool.execute(
+        'INSERT INTO wa_lead_notify_form_template (leadSource, template) VALUES (?, ?) ' +
+        'ON DUPLICATE KEY UPDATE template = VALUES(template)',
+        [leadSource, template]
+      );
+    } else {
+      await dbPool.execute('UPDATE wa_lead_notify_template SET template = ? WHERE id = 1', [template]);
+    }
+    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'update_lead_notify_template', params: { leadSource }, success: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// DELETE /admin/lead-notify-template?leadSource=... - reset one form's
+// message back to the shared default by removing its override row.
+app.delete('/admin/lead-notify-template', requireAdmin, adminLimiter, async (req, res) => {
+  const leadSource = req.query.leadSource || null;
+  if (!leadSource) return res.status(400).json({ error: 'leadSource is required' });
+
+  try {
+    await dbPool.execute('DELETE FROM wa_lead_notify_form_template WHERE leadSource = ?', [leadSource]);
+    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'reset_lead_notify_template', params: { leadSource }, success: true });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });

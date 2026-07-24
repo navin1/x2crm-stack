@@ -80,10 +80,29 @@
                     )), false, null, true);
             ?>
         </div>
+        <div class="row">
+            <label class='left-label'
+             for='targetListId'><?php echo Yii::t('marketing', 'Add to List: '); ?></label>
+            <?php
+            echo CHtml::dropDownList('targetListId', '',
+                array('' => Yii::t('marketing', '-- None --')) +
+                    X2List::getAllStaticListNames($this->controller, 'Contacts'),
+                array('id' => 'targetListId')
+            );
+            ?>
+            <?php
+            echo X2Html::hint (
+                Yii::t('marketing', 'Every {contact} submitted through this form will be added to '.
+                    'the selected list. Only static lists are shown here; create one first if '.
+                    'none exist.', array(
+                        '{contact}'=>strtolower(Modules::displayName(false, 'Contacts'))
+                    )), false, null, true);
+            ?>
+        </div>
     </div>
 </div>
 
-<?php  
+<?php
 if($this->edition == 'pro'):
 ?>
 <div class="webform-tab" id="email-tab" data-title='<?php echo Yii::t('marketing','Email'); ?>'>

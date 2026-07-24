@@ -29,6 +29,32 @@
                     assigned pracharak already gets.
                 </p>
 
+                <div class="form-group">
+                    <label for="webform-picker">Editing message for:</label>
+                    <select id="webform-picker" class="form-control" style="max-width: 400px;">
+                        <option value="">&mdash; Default (all forms without a custom message) &mdash;</option>
+                        <?php foreach ($forms as $f): ?>
+                            <option value="<?php echo (int) $f['id']; ?>"
+                                <?php echo (string) $selectedWebFormId === (string) $f['id'] ? ' selected' : ''; ?>>
+                                <?php echo CHtml::encode($f['name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <p class="text-muted">
+                    Sends to:
+                    <?php if (empty($groupNames)): ?>
+                        <em>no groups currently opted in</em>
+                    <?php else: ?>
+                        <strong><?php echo CHtml::encode(implode(', ', $groupNames)); ?></strong>
+                        <?php if ($usingFallback): ?>
+                            (default pool &mdash; no groups picked specifically for this form on
+                            <?php echo CHtml::link('Web Form Notifications', array('webFormNotify')); ?>)
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </p>
+
                 <p>
                     Available placeholders — each is replaced with the lead's actual value,
                     and a line consisting only of a blank placeholder (e.g. <code>Company: {{company}}</code>
@@ -53,16 +79,35 @@
                 </p>
 
                 <?php $form = $this->beginWidget('CActiveForm', array('action' => array('saveNotifyTemplate'), 'method' => 'POST')); ?>
+                    <input type="hidden" name="webFormId" value="<?php echo (int) $selectedWebFormId; ?>">
                     <div class="form-group">
                         <textarea name="template" class="form-control" rows="12" style="font-family: monospace;" required><?php echo CHtml::encode($template); ?></textarea>
                     </div>
                     <?php echo CHtml::submitButton('Save', array('class' => 'x2-button highlight')); ?>
+                    <?php if ($selectedWebFormId && $isCustom): ?>
+                        <?php echo CHtml::link('Reset to Default', '#', array(
+                            'class' => 'x2-button',
+                            'submit' => array('resetNotifyTemplate', 'webFormId' => $selectedWebFormId),
+                            'csrf' => true,
+                            'confirm' => 'Revert this form to the default message?',
+                        )); ?>
+                    <?php endif; ?>
                     <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
                 <?php $this->endWidget(); ?>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var picker = document.getElementById('webform-picker');
+    var baseUrl = <?php echo CJSON::encode($this->createUrl('editNotifyTemplate')); ?>;
+    picker.addEventListener('change', function () {
+        window.location = baseUrl + (this.value ? '?webFormId=' + encodeURIComponent(this.value) : '');
+    });
+})();
+</script>
 
 <style>
     .panel { border: 1px solid #ddd; margin-bottom: 20px; }

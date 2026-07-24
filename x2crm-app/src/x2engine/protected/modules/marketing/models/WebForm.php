@@ -61,6 +61,7 @@ class WebForm extends CActiveRecord {
 			array('name, type, modelName', 'length', 'max'=>100),
             array('generateLead', 'boolean'),
             array('redirectUrl', 'url', 'defaultScheme' => 'http'),
+            array('targetListId', 'numerical', 'integerOnly'=>true, 'allowEmpty'=>true),
 			array('description', 'length', 'max'=>255),
 			array('assignedTo, createdBy, updatedBy', 'length', 'max'=>20),
 			// The following rule is used by search().
@@ -86,7 +87,30 @@ class WebForm extends CActiveRecord {
 			'updatedBy'=>Yii::t('marketing', 'Updated By'),
 			'createDate'=>Yii::t('marketing', 'Create Date'),
 			'lastUpdated'=>Yii::t('marketing', 'Last Updated'),
+			'targetListId'=>Yii::t('marketing', 'Add To List'),
 		);
+	}
+
+	/**
+	 * Idempotently adds x2_web_forms.targetListId for instances whose DB
+	 * predates this column, then refreshes the AR schema cache so this
+	 * request's own reads/writes see it immediately (avoids the same
+	 * stale-schema-cache trap already handled for active/deactivateAt in
+	 * WebFormAction::run()).
+	 */
+	public static function ensureTargetListIdColumn() {
+		$db = Yii::app()->db;
+		$exists = $db->createCommand(
+			"SELECT COUNT(*) FROM information_schema.COLUMNS " .
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'x2_web_forms' AND COLUMN_NAME = 'targetListId'"
+		)->queryScalar();
+		if (!$exists) {
+			$db->createCommand(
+				"ALTER TABLE x2_web_forms ADD COLUMN targetListId INT UNSIGNED NULL"
+			)->execute();
+			$db->schema->getTable('x2_web_forms', true);
+			self::model()->refreshMetaData();
+		}
 	}
 
 	protected function beforeSave() {

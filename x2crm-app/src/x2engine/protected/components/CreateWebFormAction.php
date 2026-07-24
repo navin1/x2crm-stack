@@ -59,6 +59,7 @@ class CreateWebFormAction extends CAction {
         if ($modelClass === 'Campaign') $modelClass = 'Contacts';
 
         if($_SERVER['REQUEST_METHOD'] === 'POST'){ // save a web form
+            WebForm::ensureTargetListIdColumn();
             if(empty($_POST['name'])){
                 if ($modelClass === 'Contacts') {
                     echo json_encode(array(
@@ -129,8 +130,16 @@ class CreateWebFormAction extends CAction {
             if(isset($_POST['thankYouText'])) {
                 $model->thankYouText = Fields::getPurifier()->purify($_POST['thankYouText']);
             }
+            if (!empty($_POST['targetListId'])) {
+                $targetList = X2List::model()->findByPk((int) $_POST['targetListId']);
+                $model->targetListId = ($targetList && $targetList->type === 'static'
+                        && $targetList->modelName === 'Contacts')
+                    ? $targetList->id : null;
+            } else {
+                $model->targetListId = null;
+            }
 
-            
+
             if (Yii::app()->contEd('pro')) {
                 if(isset($_POST['css'])) {
                     $model->css = $_POST['css'];

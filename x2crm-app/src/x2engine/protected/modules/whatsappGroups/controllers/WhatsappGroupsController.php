@@ -195,7 +195,10 @@ class WhatsappGroupsController extends x2base {
     private function getAccessibleContactLists() {
         $criteria = new CDbCriteria();
         $criteria->addCondition('modelName = "Contacts"');
-        $criteria->addCondition('type = "dynamic"');
+        // Both types resolve correctly through X2List::queryCriteria() in
+        // getListPhones() below — static lists are how Web Lead Forms' new
+        // "Add to List" target lists show up here for group linking.
+        $criteria->addInCondition('type', array('dynamic', 'static'));
         if (!Yii::app()->params->isAdmin) {
             $condition = 'visibility="1" OR assignedTo="Anyone" OR assignedTo="' . Yii::app()->user->getName() . '"';
             $groupLinks = Yii::app()->db->createCommand()
@@ -468,24 +471,90 @@ class WhatsappGroupsController extends x2base {
      * personal DM the assigned pracharak already gets — only the courtesy
      * copy posted into whichever group(s) have notifications toggled on.
      */
-    public function actionEditNotifyTemplate() {
+    public function actionEditNotifyTemplate($webFormId = null) {
         if (!Yii::app()->params->isAdmin) {
             throw new CHttpException(403, 'Admin access required');
         }
+        $this->ensureWebFormManagementColumns();
+        $forms = Yii::app()->db->createCommand()
+            ->select('*')
+            ->from('x2_web_forms')
+            ->where('type=:type', array(':type' => 'weblead'))
+            ->order('id DESC')
+            ->queryAll();
 
-        try {
-            $result = $this->callWaHub('GET', '/admin/lead-notify-template');
-            $template = isset($result['template']) ? $result['template'] : '';
-        } catch (Exception $e) {
-            Yii::app()->user->setFlash('error', 'Error loading template: ' . $e->getMessage());
-            $template = '';
+        $selectedForm = null;
+        $leadSource = null;
+        if ($webFormId) {
+            foreach ($forms as $f) {
+                if ((int) $f['id'] === (int) $webFormId) {
+                    $selectedForm = $f;
+                    break;
+                }
+            }
+            if ($selectedForm) {
+                $leadSource = $selectedForm['leadSource'] ?: null;
+            }
         }
 
-        $this->render('notifyTemplate', array('template' => $template));
+        $template = '';
+        $isCustom = false;
+        try {
+            $qs = $leadSource ? ('?leadSource=' . urlencode($leadSource)) : '';
+            $result = $this->callWaHub('GET', '/admin/lead-notify-template' . $qs);
+            $template = isset($result['template']) ? $result['template'] : '';
+            $isCustom = !empty($result['isCustom']);
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', 'Error loading template: ' . $e->getMessage());
+        }
+
+        // Which WhatsApp group(s) this form's leads actually reach — read
+        // only, informational. Falls back to the same notifyOnNewLead=1
+        // pool notifyGroupsOfNewLead() itself falls back to.
+        $groupNames = array();
+        $usingFallback = true;
+        try {
+            $allGroups = $this->callWaHub('GET', '/admin/groups');
+        } catch (Exception $e) {
+            $allGroups = array();
+        }
+        if ($leadSource) {
+            $mappedIds = Yii::app()->db->createCommand()
+                ->select('groupId')->from('wa_lead_notify_group_map')
+                ->where('leadSource=:ls', array(':ls' => $leadSource))
+                ->queryColumn();
+            if (!empty($mappedIds)) {
+                $usingFallback = false;
+                $byId = array();
+                foreach ($allGroups as $g) {
+                    $byId[$g['groupId']] = $g['groupName'];
+                }
+                foreach ($mappedIds as $gid) {
+                    $groupNames[] = isset($byId[$gid]) ? $byId[$gid] : $gid;
+                }
+            }
+        }
+        if ($usingFallback) {
+            foreach ($allGroups as $g) {
+                if (!empty($g['notifyOnNewLead'])) {
+                    $groupNames[] = $g['groupName'];
+                }
+            }
+        }
+
+        $this->render('notifyTemplate', array(
+            'template' => $template,
+            'forms' => $forms,
+            'selectedWebFormId' => $webFormId,
+            'isCustom' => $isCustom,
+            'groupNames' => $groupNames,
+            'usingFallback' => $usingFallback,
+        ));
     }
 
     /**
-     * Saves the new-lead group broadcast wording.
+     * Saves the new-lead group broadcast wording — either the shared
+     * default (webFormId=0) or a per-form override.
      */
     public function actionSaveNotifyTemplate() {
         if (!Yii::app()->params->isAdmin) {
@@ -496,14 +565,39 @@ class WhatsappGroupsController extends x2base {
         }
 
         $template = Yii::app()->request->getPost('template', '');
+        $webFormId = (int) Yii::app()->request->getPost('webFormId', 0);
 
         try {
             if (trim($template) === '') {
                 throw new CException('Template cannot be empty');
             }
-            $result = $this->callWaHub('POST', '/admin/lead-notify-template', array('template' => $template));
+
+            $leadSource = null;
+            if ($webFormId) {
+                $this->ensureWebFormManagementColumns();
+                $form = Yii::app()->db->createCommand()
+                    ->select('id, leadSource')->from('x2_web_forms')
+                    ->where('id=:id', array(':id' => $webFormId))
+                    ->queryRow();
+                if (!$form) {
+                    throw new CException('Form not found');
+                }
+                $leadSource = $form['leadSource'];
+                if (empty($leadSource)) {
+                    // Backfill only leadSource, NOT generateLead — a custom
+                    // message alone shouldn't silently start generating Lead
+                    // records; actionSaveWebFormNotify already owns turning
+                    // that on when notifications are actually enabled.
+                    $leadSource = 'WebForm-' . $webFormId;
+                    Yii::app()->db->createCommand()->update('x2_web_forms',
+                        array('leadSource' => $leadSource), 'id=:id', array(':id' => $webFormId));
+                }
+            }
+
+            $result = $this->callWaHub('POST', '/admin/lead-notify-template',
+                array('template' => $template, 'leadSource' => $leadSource));
             if (isset($result['ok']) && $result['ok']) {
-                Yii::app()->user->setFlash('success', 'New-lead message template updated.');
+                Yii::app()->user->setFlash('success', 'Message template updated.');
             } else {
                 throw new CException(isset($result['error']) ? $result['error'] : 'Failed to save template');
             }
@@ -511,7 +605,39 @@ class WhatsappGroupsController extends x2base {
             Yii::app()->user->setFlash('error', $e->getMessage());
         }
 
-        $this->redirect(array('editNotifyTemplate'));
+        $this->redirect(array('editNotifyTemplate', 'webFormId' => $webFormId ?: null));
+    }
+
+    /**
+     * Reverts one form's custom message back to the shared default by
+     * deleting its wa_lead_notify_form_template override row.
+     */
+    public function actionResetNotifyTemplate() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+
+        $webFormId = (int) Yii::app()->request->getPost('webFormId', 0);
+
+        try {
+            if ($webFormId) {
+                $leadSource = Yii::app()->db->createCommand()
+                    ->select('leadSource')->from('x2_web_forms')
+                    ->where('id=:id', array(':id' => $webFormId))
+                    ->queryScalar();
+                if ($leadSource) {
+                    $this->callWaHub('DELETE', '/admin/lead-notify-template?leadSource=' . urlencode($leadSource));
+                }
+            }
+            Yii::app()->user->setFlash('success', 'Reverted to the default message.');
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect(array('editNotifyTemplate', 'webFormId' => $webFormId ?: null));
     }
 
     /**
@@ -710,11 +836,29 @@ class WhatsappGroupsController extends x2base {
         foreach (Yii::app()->db->createCommand()->select('*')->from('wa_webform_notify')->queryAll() as $row) {
             $notifyMap[$row['webFormId']] = $row['pracharakId'];
         }
+
+        try {
+            $groups = $this->callWaHub('GET', '/admin/groups');
+        } catch (Exception $e) {
+            $groups = array();
+        }
+        $groupNotifyMap = array(); // webFormId => array of groupId (WhatsApp JID strings)
+        $groupMapRows = Yii::app()->db->createCommand()
+            ->select('f.id AS webFormId, m.groupId')
+            ->from('wa_lead_notify_group_map m')
+            ->join('x2_web_forms f', 'f.leadSource = m.leadSource')
+            ->queryAll();
+        foreach ($groupMapRows as $row) {
+            $groupNotifyMap[$row['webFormId']][] = $row['groupId'];
+        }
+
         $this->render('webFormNotify', array(
             'forms' => $forms,
             'pracharaks' => $pracharaks === null ? array() : $pracharaks,
             'hasPracharakList' => $pracharaks !== null,
             'notifyMap' => $notifyMap,
+            'groups' => $groups,
+            'groupNotifyMap' => $groupNotifyMap,
             'hostInfo' => rtrim(Yii::app()->request->getHostInfo(), '/'),
         ));
     }
@@ -740,6 +884,7 @@ class WhatsappGroupsController extends x2base {
         $this->ensureWebFormManagementColumns();
         $webFormId = (int) Yii::app()->request->getPost('webFormId');
         $pracharakId = Yii::app()->request->getPost('pracharakId', '');
+        $groupIds = (array) Yii::app()->request->getPost('groupIds', array());
 
         try {
             $form = Yii::app()->db->createCommand()
@@ -751,42 +896,80 @@ class WhatsappGroupsController extends x2base {
                 throw new CException('Form not found');
             }
 
-            if ($pracharakId === '') {
+            // Defensive: only accept groupIds that actually exist right now,
+            // same reasoning as the pracharak validIds check below.
+            try {
+                $allGroups = $this->callWaHub('GET', '/admin/groups');
+            } catch (Exception $e) {
+                $allGroups = array();
+            }
+            $validGroupIds = array_map(function ($g) { return $g['groupId']; }, $allGroups);
+            $groupIds = array_values(array_intersect($groupIds, $validGroupIds));
+
+            $wantsNotify = ($pracharakId !== '') || !empty($groupIds);
+
+            if (!$wantsNotify) {
                 Yii::app()->db->createCommand()->delete('wa_webform_notify', 'webFormId=:id', array(':id' => $webFormId));
+                if (!empty($form['leadSource'])) {
+                    Yii::app()->db->createCommand()->delete('wa_lead_notify_group_map',
+                        'leadSource=:ls', array(':ls' => $form['leadSource']));
+                }
                 Yii::app()->user->setFlash('success', 'WhatsApp notifications turned off for "' . $form['name'] . '".');
             } else {
-                $validIds = array_map(function ($sp) { return (string) $sp['id']; }, $this->getPracharakContacts() ?: array());
-                if (!in_array((string) $pracharakId, $validIds, true)) {
-                    throw new CException('That contact is not currently in the "Pracharak" list.');
+                if ($pracharakId !== '') {
+                    $validIds = array_map(function ($sp) { return (string) $sp['id']; }, $this->getPracharakContacts() ?: array());
+                    if (!in_array((string) $pracharakId, $validIds, true)) {
+                        throw new CException('That contact is not currently in the "Pracharak" list.');
+                    }
                 }
 
+                // leadSource/generateLead backfill now runs whenever EITHER
+                // a pracharak or any groups are being set, not just a
+                // pracharak — group targeting needs the same leadSource-
+                // tagged Lead record to detect new submissions.
                 if (empty($form['leadSource'])) {
+                    $form['leadSource'] = 'WebForm-' . $webFormId;
                     Yii::app()->db->createCommand()->update('x2_web_forms',
-                        array('leadSource' => 'WebForm-' . $webFormId, 'generateLead' => 1),
+                        array('leadSource' => $form['leadSource'], 'generateLead' => 1),
                         'id=:id', array(':id' => $webFormId));
                 } elseif (!$form['generateLead']) {
                     Yii::app()->db->createCommand()->update('x2_web_forms',
                         array('generateLead' => 1), 'id=:id', array(':id' => $webFormId));
                 }
 
-                $exists = Yii::app()->db->createCommand()
-                    ->select('webFormId')->from('wa_webform_notify')
-                    ->where('webFormId=:id', array(':id' => $webFormId))
-                    ->queryScalar();
-                if ($exists !== false) {
-                    Yii::app()->db->createCommand()->update('wa_webform_notify',
-                        array('pracharakId' => $pracharakId),
-                        'webFormId=:id', array(':id' => $webFormId));
+                if ($pracharakId !== '') {
+                    $exists = Yii::app()->db->createCommand()
+                        ->select('webFormId')->from('wa_webform_notify')
+                        ->where('webFormId=:id', array(':id' => $webFormId))
+                        ->queryScalar();
+                    if ($exists !== false) {
+                        Yii::app()->db->createCommand()->update('wa_webform_notify',
+                            array('pracharakId' => $pracharakId),
+                            'webFormId=:id', array(':id' => $webFormId));
+                    } else {
+                        Yii::app()->db->createCommand()->insert('wa_webform_notify', array(
+                            'webFormId' => $webFormId,
+                            'pracharakId' => $pracharakId,
+                            // Start the watermark at "now" — only notify about
+                            // submissions from this point forward, not every
+                            // historical lead already sitting on this leadSource.
+                            'lastPolledAt' => time(),
+                        ));
+                    }
                 } else {
-                    Yii::app()->db->createCommand()->insert('wa_webform_notify', array(
-                        'webFormId' => $webFormId,
-                        'pracharakId' => $pracharakId,
-                        // Start the watermark at "now" — only notify about
-                        // submissions from this point forward, not every
-                        // historical lead already sitting on this leadSource.
-                        'lastPolledAt' => time(),
+                    // Pracharak explicitly off but group targeting is on.
+                    Yii::app()->db->createCommand()->delete('wa_webform_notify', 'webFormId=:id', array(':id' => $webFormId));
+                }
+
+                Yii::app()->db->createCommand()->delete('wa_lead_notify_group_map',
+                    'leadSource=:ls', array(':ls' => $form['leadSource']));
+                foreach ($groupIds as $gid) {
+                    Yii::app()->db->createCommand()->insert('wa_lead_notify_group_map', array(
+                        'leadSource' => $form['leadSource'],
+                        'groupId' => $gid,
                     ));
                 }
+
                 Yii::app()->user->setFlash('success', 'WhatsApp notifications updated for "' . $form['name'] . '".');
             }
         } catch (Exception $e) {

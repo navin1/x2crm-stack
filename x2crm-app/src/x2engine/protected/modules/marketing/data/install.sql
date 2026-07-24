@@ -78,6 +78,7 @@ CREATE TABLE x2_web_forms(
     requireCaptcha       TINYINT DEFAULT 0,
     fingerprintDetection TINYINT DEFAULT 1,
     thankYouText         TEXT DEFAULT NULL,
+    targetListId         INT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (id)
 ) COLLATE = utf8_general_ci;
 /*&*/

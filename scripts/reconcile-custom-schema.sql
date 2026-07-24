@@ -173,6 +173,21 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- targetListId: optional static Contacts list that a Web Lead Form's
+-- submissions get added to, so the existing wa_groups.listId auto-sync
+-- can pick them up without any changes to wa-hub.
+SET @target_list_id_exists = (
+  SELECT COUNT(*) FROM information_schema.columns
+  WHERE table_schema = DATABASE() AND table_name = 'x2_web_forms' AND column_name = 'targetListId'
+);
+SET @sql = IF(@web_forms_table_exists > 0 AND @target_list_id_exists = 0,
+  'ALTER TABLE `x2_web_forms` ADD COLUMN `targetListId` int unsigned DEFAULT NULL',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 -- ---------------------------------------------------------------------
 -- 3. Guest (unauthenticated) RBAC entries this stack added, so the public
 --    lead-form endpoints and the MailerLite/WhatsApp Groups auto-sync

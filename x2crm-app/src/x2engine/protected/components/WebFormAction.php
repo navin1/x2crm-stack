@@ -252,6 +252,20 @@ class WebFormAction extends CAction {
                         }
                     }
 
+                    if ($extractedParams['targetListId']) {
+                        try {
+                            $targetList = X2List::model()->findByPk($extractedParams['targetListId']);
+                            if ($targetList && $targetList->modelName === 'Contacts') {
+                                // No-ops for non-static lists (e.g. converted to
+                                // dynamic after being linked here) rather than erroring.
+                                $targetList->addIds($model->id);
+                            }
+                        } catch (Exception $e) {
+                            Yii::log('Failed to add weblead Contact to target list: ' .
+                                $e->getMessage(), CLogger::LEVEL_WARNING, 'application');
+                        }
+                    }
+
                     self::addTags($model);
                     $tags = ((!isset($_POST['tags']) || empty($_POST['tags'])) ?
                             array() : explode(',', $_POST['tags']));
@@ -759,6 +773,8 @@ class WebFormAction extends CAction {
             $webForm = WebForm::model()->findByPk($_GET['webFormId']);
         }
 
+        WebForm::ensureTargetListIdColumn();
+
         // Enforced here (not just a client-side notice) so a deactivated
         // form's iframe stops accepting submissions immediately wherever
         // it's embedded, even via a raw POST that skips any JS on the page.
@@ -768,7 +784,7 @@ class WebFormAction extends CAction {
         // so they may not be in the AR model's cached table schema yet.
         if (isset($webForm)) {
             $status = Yii::app()->db->createCommand(
-                'SELECT active, deactivateAt FROM x2_web_forms WHERE id=:id'
+                'SELECT active, deactivateAt, targetListId FROM x2_web_forms WHERE id=:id'
             )->queryRow(true, array(':id' => $webForm->id));
             $active = $status && array_key_exists('active', $status) ? (bool) $status['active'] : true;
             $deactivateAt = $status && !empty($status['deactivateAt']) ? $status['deactivateAt'] : null;
@@ -789,7 +805,13 @@ class WebFormAction extends CAction {
         $extractedParams['redirectUrl'] = null;
         $extractedParams['requireCaptcha'] = false;
         $extractedParams['thankYouText'] = false;
+        $extractedParams['targetListId'] = null;
         if (isset($webForm)) { // new method
+            // Read from the same raw $status query above (not the $webForm AR
+            // model) for the same schema-cache-staleness reason as active/deactivateAt.
+            if (!empty($status['targetListId'])) {
+                $extractedParams['targetListId'] = (int) $status['targetListId'];
+            }
             if (!empty($webForm->leadSource)) {
                 $extractedParams['leadSource'] = $webForm->leadSource;
             }

@@ -98,6 +98,12 @@
                             <?php endif; ?>
                             <span class="text-muted" style="margin-left: 8px;">When on, every new lead notification (the same one sent to the assigned pracharak) is also posted into this group, from the WhatsApp number paired to this app. Requires that number to already be a member of this group.</span>
                         <?php $this->endWidget(); ?>
+                        <div class="text-muted" style="margin-top: 4px;">
+                            Note: if a Web Lead Form has this group explicitly selected under
+                            <?php echo CHtml::link('Web Form Notifications', array('webFormNotify')); ?>,
+                            that form's leads reach this group regardless of the toggle above.
+                            This toggle only affects forms with no explicit group selection.
+                        </div>
                     </dd>
 
                     <dt>Link to list:</dt>

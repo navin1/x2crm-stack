@@ -595,6 +595,30 @@ rather keep backups on the same cloud, with no code changes needed since
   `$webleadFieldDefaults`/`payload.country` blocks in each for the
   pattern to extend if your Contacts model has different custom required
   fields.
+- **`docker compose up -d --build` (or `make up`) doesn't actually deploy
+  PHP/view changes to `x2crm_app`, even though the build logs show the
+  new files being copied in:** `x2crm`'s `/var/www/html` is a named
+  Docker volume (`x2crm_code`), not a bind mount — once that volume
+  exists (any run after the very first `make up`), Docker does **not**
+  refresh it from a newly built image; the volume's old file contents
+  just persist underneath the fresh image, silently shadowing it. Confirm
+  with `docker inspect x2crm_app --format '{{ range .Mounts }}{{ .Source
+  }} -> {{ .Destination }}{{"\n"}}{{ end }}'`. Until this is fixed
+  properly (e.g. switching to a bind mount, or adding a sync step to the
+  container's entrypoint), the workaround is to copy changed PHP/view
+  files into the running container directly and fix ownership:
+  ```bash
+  docker cp path/to/File.php x2crm_app:/var/www/html/path/to/File.php
+  docker exec x2crm_app chown www-data:www-data /var/www/html/path/to/File.php
+  docker exec x2crm_app chmod 644 /var/www/html/path/to/File.php
+  ```
+  `wa_hub` does **not** have this problem — it only mounts a volume for
+  `/app/auth_info_baileys` (the WhatsApp session), so a normal `docker
+  compose up -d --build wa_hub` deploys `server.js` changes correctly.
+  Note that rebuilding `wa_hub` alone still triggers Compose to rebuild
+  and recreate `x2crm_app` too (a dependency-graph side effect) — that
+  recreate does *not* wipe the `x2crm_code` volume, so anything already
+  `docker cp`'d in survives, but it's still worth re-verifying after.
 
 ---
 
