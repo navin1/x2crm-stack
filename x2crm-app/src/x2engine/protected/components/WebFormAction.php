@@ -407,6 +407,8 @@ class WebFormAction extends CAction {
             'css' => $extractedParams['css'],
             'header' => $extractedParams['header'],
             'requireCaptcha' => $extractedParams['requireCaptcha'],
+            'formTitle' => $extractedParams['formTitle'],
+            'formDescription' => $extractedParams['formDescription'],
                 ), $sanitizedGetParams);
         $this->controller->renderPartial('application.components.views.webForm', $viewParams);
 
@@ -806,7 +808,15 @@ class WebFormAction extends CAction {
         $extractedParams['requireCaptcha'] = false;
         $extractedParams['thankYouText'] = false;
         $extractedParams['targetListId'] = null;
+        $extractedParams['formTitle'] = null;
+        $extractedParams['formDescription'] = null;
         if (isset($webForm)) { // new method
+            if (!empty($webForm->name)) {
+                $extractedParams['formTitle'] = $webForm->name;
+            }
+            if (!empty($webForm->description)) {
+                $extractedParams['formDescription'] = $webForm->description;
+            }
             // Read from the same raw $status query above (not the $webForm AR
             // model) for the same schema-cache-staleness reason as active/deactivateAt.
             if (!empty($status['targetListId'])) {

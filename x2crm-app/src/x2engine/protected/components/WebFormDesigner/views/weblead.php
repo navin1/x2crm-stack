@@ -42,7 +42,19 @@
 <div class='webform-tab' id='generate-tab' data-title='<?php echo Yii::t('marketing','Generate Records'); ?>' >
     <div class='tab-content'>
         <div class="row">
-            <label class='left-label' 
+            <label class='left-label' style='font-size: 14px; font-weight: bold;'
+             for='description'><?php echo Yii::t('marketing', 'Form Description: '); ?></label>
+            <textarea id='description' name='description' class='left-label' rows='2'
+                style='width: 300px; display: inline-block;'></textarea>
+            <?php
+            echo X2Html::hint (
+                Yii::t('marketing', 'Optional intro text shown above the fields on the public '.
+                    'form itself (below the logo/title) — not the same as the internal Name above.'),
+                false, null, true);
+            ?>
+        </div>
+        <div class="row">
+            <label class='left-label'
              for='generateLead'><?php echo Yii::t('app', 'Generate {Lead}: ', array(
                  '{Lead}'=>Modules::displayName(false, 'X2Leads')
              )); ?></label>
@@ -81,8 +93,8 @@
             ?>
         </div>
         <div class="row">
-            <label class='left-label'
-             for='targetListId'><?php echo Yii::t('marketing', 'Add to List: '); ?></label>
+            <label class='left-label' style='font-size: 14px; font-weight: bold;'
+             for='targetListId'><?php echo Yii::t('marketing', 'Add to static Contacts List: '); ?></label>
             <?php
             echo CHtml::dropDownList('targetListId', '',
                 array('' => Yii::t('marketing', '-- None --')) +

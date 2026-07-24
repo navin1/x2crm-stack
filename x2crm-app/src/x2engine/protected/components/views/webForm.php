@@ -209,18 +209,12 @@ html {
       bottom edge of the frame. Now it is based on 325px height for weblead,
       and 100px for weblist */
 
-    if (isset ($iframeHeight)) {
-        $height = $iframeHeight;
-    } else {
-        $height = $type == 'weblist' ? 125 : 325;
-    }
     if (isset ($bs)) {
         $border = intval(preg_replace('/[^0-9]/', '', $bs));
     } else if (isset ($bc)) {
         $border = 0;
     } else $border = 0;
     $padding = 36;
-    $height = $height - $padding - (2 * $border);
 
     echo 'border: '. $border .'px solid ';
     if (isset ($bc)) echo addslashes ($bc);
@@ -232,12 +226,21 @@ html {
     -webkit-border-radius: 3px;
     border-radius: 3px;
     padding-bottom: <?php echo addslashes ($padding) ."px;\n"?>
-    height: <?php echo addslashes ($height) ."px;\n"?>
-    /* Any embed's fixed iframe height is baked in at "Generate HTML & Save"
-       time and can't grow to match this template's own polish later — if a
-       form ends up with more fields/whitespace than that height allows,
-       scroll instead of silently clipping content off the bottom. */
+    <?php if (isset ($iframeHeight)): ?>
+    /* Only forced to a fixed height when the caller actually told us how
+       tall its iframe box is (baked into "Generate HTML & Save" at embed
+       time) — a real embed's content can't grow past that, so it scrolls
+       internally instead of silently clipping off the bottom. Without
+       that signal (opened as its own page, or embedded without the
+       param), there's no fixed box to match, so let it size naturally
+       instead of arbitrarily capping at the weblead/weblist default and
+       leaving a cramped, scrolled-looking page. */
+    height: <?php echo addslashes ($iframeHeight - $padding - (2 * $border)) ."px;\n"?>
     overflow-y: auto;
+    <?php else: ?>
+    min-height: 100%;
+    background-color: #f4f5f7;
+    <?php endif; ?>
 }
 body {
     /* Per requirement: always a clean white background, regardless of any
@@ -257,8 +260,45 @@ body {
     ?>
     font-size: 13px;
     line-height: 1.4;
-    margin: 0;
+    margin: 0 auto;
     padding: 18px 20px;
+    /* Fields below are all width:100% of this element, with nothing
+       upstream ever constraining it — fine inside a small preview iframe,
+       but opened directly (or embedded at width:100% on a full-width
+       page) the fields stretch edge-to-edge across the whole viewport.
+       This caps it at a readable form width without affecting the
+       small-iframe case (iframes narrower than this are unaffected,
+       since 100%-of-a-200px-iframe is still just 200px). */
+    max-width: 500px;
+    box-sizing: border-box;
+    <?php if (!isset ($iframeHeight)): ?>
+    /* Card look, only when there's room for it (not squeezed into a
+       tightly-sized embed iframe) — sits on the light grey <html>
+       background set above. */
+    border: 1px solid #e4e7ec;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+    <?php endif; ?>
+}
+.web-form-logo {
+    display: block;
+    margin: 0 auto 18px;
+    max-height: 100px;
+    max-width: 100%;
+}
+.web-form-title {
+    margin: 0 0 8px;
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    color: #1d2939;
+}
+.web-form-description {
+    margin: 0 0 20px;
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: center;
+    color: #667085;
 }
 
 label {
@@ -336,12 +376,11 @@ input[type="file"] {
 }
 #submit {
     display: block;
-    margin-top: 8px;
-    margin-bottom: 5px;
-    padding: 10px 16px;
+    margin: 12px auto 5px;
+    padding: 10px 32px;
     border: none;
     border-radius: 6px;
-    width: 100%;
+    min-width: 160px;
     font-family: inherit;
     font-size: 14px;
     font-weight: 600;
@@ -360,6 +399,7 @@ input[type="file"] {
 }
 .submit-button-row {
     height: auto;
+    text-align: center;
 }
 [class^="flash-"] {
     padding: 10px 14px;
@@ -407,6 +447,35 @@ if (Yii::app()->contEd('pro') && $type === 'weblead') {
 ?>
 </head>
 <body>
+
+<?php
+// Same logo shown on X2CRM's own login screen (Administration > General
+// Settings > upload logo) — uploads/protected is Apache-denied by design
+// (.htaccess: "deny from all"), so it has to be served through Media's
+// own getPublicUrl(), not a raw path. Skip entirely if none has been
+// uploaded, matching protected/views/site/login.php's own check.
+$loginLogo = Media::getLoginLogo();
+if ($loginLogo) {
+    echo '<img class="web-form-logo" src="' . CHtml::encode($loginLogo->getPublicUrl()) . '" alt="">';
+}
+?>
+
+<?php
+// Falls back to a generic default for weblead forms specifically (not
+// weblist/service) whenever the admin hasn't set one of their own on the
+// form itself — same field either way, this is just what shows when it's
+// blank.
+if (empty($formDescription) && $type === 'weblead') {
+    $formDescription = Yii::t('marketing', 'Welcome! Please complete the registration form '.
+        'below to confirm your spot for our upcoming programs and events.');
+}
+?>
+<?php if (!empty($formTitle)): ?>
+    <h1 class="web-form-title"><?php echo CHtml::encode($formTitle); ?></h1>
+<?php endif; ?>
+<?php if (!empty($formDescription)): ?>
+    <p class="web-form-description"><?php echo CHtml::encode($formDescription); ?></p>
+<?php endif; ?>
 
 <?php
 foreach(Yii::app()->user->getFlashes() as $key => $message) {

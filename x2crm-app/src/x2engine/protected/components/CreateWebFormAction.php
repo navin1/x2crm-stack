@@ -130,6 +130,9 @@ class CreateWebFormAction extends CAction {
             if(isset($_POST['thankYouText'])) {
                 $model->thankYouText = Fields::getPurifier()->purify($_POST['thankYouText']);
             }
+            if(isset($_POST['description'])) {
+                $model->description = Fields::getPurifier()->purify($_POST['description']);
+            }
             if (!empty($_POST['targetListId'])) {
                 $targetList = X2List::model()->findByPk((int) $_POST['targetListId']);
                 $model->targetListId = ($targetList && $targetList->type === 'static'

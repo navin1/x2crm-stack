@@ -53,14 +53,51 @@ Yii::app()->params->profile = Profile::model()->findByPk(1);
 <title><?php echo CHtml::encode($this->pageTitle); ?></title>
 
 <style type="text/css">
+* , *::before, *::after {
+    box-sizing: border-box;
+}
+html {
+    min-height: 100%;
+    background-color: #f4f5f7;
+}
 body {
-	font-size:12px;
-	font-family: Arial, Helvetica, sans-serif;
-	width:189px;
+    background-color: #ffffff;
+    color: #26303d;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 40px auto;
+    padding: 32px 24px;
+    max-width: 420px;
+    text-align: center;
+    border: 1px solid #e4e7ec;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.web-form-logo {
+    display: block;
+    margin: 0 auto 18px;
+    max-height: 100px;
+    max-width: 100%;
+}
+h1 {
+    margin: 0 0 8px;
+    font-size: 20px;
+    color: #1d2939;
+}
+p {
+    margin: 0 0 6px;
+    color: #667085;
 }
 </style>
 </head>
 <body>
+<?php
+$submitLogo = Media::getLoginLogo();
+if ($submitLogo) {
+    echo '<img class="web-form-logo" src="' . CHtml::encode($submitLogo->getPublicUrl()) . '" alt="">';
+}
+?>
 <?php
 if (!empty($error)) { ?>
 	<h1><?php echo Yii::t('contacts','We\'re Sorry!'); ?></h1>
