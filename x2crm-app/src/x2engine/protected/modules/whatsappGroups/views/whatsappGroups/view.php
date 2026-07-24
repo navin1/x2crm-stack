@@ -6,7 +6,7 @@
 
 <div id="x2-layout">
     <div id="x2-layout-content">
-        <h1><?php echo CHtml::encode($group['groupName']); ?></h1>
+        <div class="page-title icon custom-module"><h2><?php echo CHtml::encode($group['groupName']); ?></h2></div>
 
         <?php if (Yii::app()->user->hasFlash('success')): ?>
             <div class="alert alert-success">
@@ -53,7 +53,7 @@
                         <?php if ($linkedList): ?>
                             <?php echo CHtml::link(CHtml::encode($linkedList->name), array('/contacts/contacts/list', 'id' => $linkedList->id)); ?>
                             &nbsp;
-                            <?php echo CHtml::link('Sync Members from List', array('syncMembers', 'groupId' => $groupId), array(
+                            <?php echo CHtml::link('Sync Now', array('syncMembers', 'groupId' => $groupId), array(
                                 'class' => 'btn btn-xs btn-info',
                                 'data-confirm' => 'Add/remove WhatsApp members to match this list\'s current contacts?',
                             )); ?>
@@ -61,6 +61,26 @@
                             <span class="text-muted">None</span>
                         <?php endif; ?>
                     </dd>
+
+                    <?php if ($linkedList): ?>
+                    <dt>Auto-sync:</dt>
+                    <dd>
+                        <?php $autoSyncForm = $this->beginWidget('CActiveForm', array('action' => array('toggleAutoSync'), 'method' => 'POST')); ?>
+                            <input type="hidden" name="groupId" value="<?php echo CHtml::encode($groupId); ?>">
+                            <input type="hidden" name="enabled" value="<?php echo !empty($group['autoSync']) ? '0' : '1'; ?>">
+                            <?php if (!empty($group['autoSync'])): ?>
+                                <span class="label label-success">ON</span>
+                                &nbsp;
+                                <?php echo CHtml::submitButton('Turn off', array('class' => 'btn btn-xs btn-default')); ?>
+                            <?php else: ?>
+                                <span class="label label-default">OFF</span>
+                                &nbsp;
+                                <?php echo CHtml::submitButton('Turn on', array('class' => 'btn btn-xs btn-default')); ?>
+                            <?php endif; ?>
+                            <span class="text-muted" style="margin-left: 8px;">When on, this group's members are automatically re-synced from the linked list every few minutes.</span>
+                        <?php $this->endWidget(); ?>
+                    </dd>
+                    <?php endif; ?>
                 </dl>
 
                 <div class="form-group" style="margin-top: 10px;">

@@ -41,31 +41,18 @@
 
                     <div class="form-group" id="manualContactsGroup">
                         <label>Add Contacts (Optional)</label>
-                        <p class="text-muted">Select contacts to add as initial members. Only contacts with phone numbers will be added.</p>
+                        <p class="text-muted">Search for contacts to add as initial members. Only contacts with phone numbers can be added.</p>
 
                         <div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">
-                            <input type="text" id="contactFilter" class="form-control" placeholder="Search contacts..." style="max-width: 250px;">
-                            <a href="#" id="selectAllContacts">Select all</a>
-                            <a href="#" id="selectNoneContacts">Select none</a>
+                            <input type="text" id="contactFilter" class="form-control" placeholder="Search by name or phone..." style="max-width: 250px;">
+                            <a href="#" id="selectNoneContacts">Clear selected</a>
                         </div>
 
+                        <div id="selectedContactsList" style="margin-bottom: 10px;"></div>
+
                         <div id="contactsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #fafafa;">
-                            <?php foreach ($contacts as $contact): ?>
-                                <?php if ($contact->phone): ?>
-                                    <div class="checkbox contact-item" data-name="<?php echo strtolower(CHtml::encode($contact->name)); ?>">
-                                        <label>
-                                            <input type="checkbox" name="contacts[]" value="<?php echo $contact->id; ?>">
-                                            <strong><?php echo CHtml::encode($contact->name); ?></strong>
-                                            <br>
-                                            <small class="text-muted"><?php echo CHtml::encode($contact->phone); ?></small>
-                                        </label>
-                                    </div>
-                                <?php endif; ?>
-                            <?php endforeach; ?>
+                            <p class="text-muted" style="margin: 0;">Start typing above to search contacts.</p>
                         </div>
-                        <small class="form-text text-muted" style="display: block; margin-top: 8px;">
-                            <?php echo Contacts::model()->count(array('condition' => 'phone IS NOT NULL AND phone != ""')); ?> contacts have phone numbers.
-                        </small>
                     </div>
 
                     <div style="margin-top: 20px;">
@@ -80,34 +67,113 @@
 </div>
 
 <script>
-    document.getElementById('contactFilter').addEventListener('keyup', function() {
-        var filter = this.value.toLowerCase();
-        var items = document.querySelectorAll('.contact-item');
+(function() {
+    // Selected contacts are tracked here (id -> {name, phone}) rather than
+    // relying on checkboxes staying in the DOM — search results are
+    // replaced on every keystroke, so a contact picked under one search
+    // term would otherwise vanish the moment a different search replaces
+    // the results list. Hidden inputs for these get injected at submit
+    // time instead of depending on native checkbox form-serialization.
+    var selected = {};
+    var contactsList = document.getElementById('contactsList');
+    var selectedList = document.getElementById('selectedContactsList');
+    var filterInput = document.getElementById('contactFilter');
+    var searchTimer = null;
 
-        items.forEach(function(item) {
-            if (item.dataset.name.indexOf(filter) > -1) {
-                item.style.display = '';
-            } else {
-                item.style.display = 'none';
-            }
+    function renderSelected() {
+        var ids = Object.keys(selected);
+        if (ids.length === 0) {
+            selectedList.innerHTML = '';
+            return;
+        }
+        var html = '<p class="text-muted" style="margin: 0 0 6px;">' + ids.length + ' contact(s) selected:</p>';
+        ids.forEach(function(id) {
+            html += '<span style="display: inline-block; background: #e9ecef; border-radius: 3px; padding: 3px 8px; margin: 0 6px 6px 0; font-size: 13px;">' +
+                selected[id].name + ' <a href="#" data-remove="' + id + '" style="color: #721c24; text-decoration: none;">&times;</a></span>';
         });
-    });
-    document.getElementById('selectAllContacts').addEventListener('click', function(e) {
-        e.preventDefault();
-        document.querySelectorAll('.contact-item:not([style*="display: none"]) input[type=checkbox]').forEach(function(cb) {
-            cb.checked = true;
+        selectedList.innerHTML = html;
+        selectedList.querySelectorAll('[data-remove]').forEach(function(el) {
+            el.addEventListener('click', function(e) {
+                e.preventDefault();
+                delete selected[this.dataset.remove];
+                renderSelected();
+                var cb = contactsList.querySelector('input[value="' + this.dataset.remove + '"]');
+                if (cb) cb.checked = false;
+            });
         });
+    }
+
+    function renderResults(contacts) {
+        if (contacts.length === 0) {
+            contactsList.innerHTML = '<p class="text-muted" style="margin: 0;">No matching contacts with a phone number.</p>';
+            return;
+        }
+        var html = '';
+        contacts.forEach(function(c) {
+            var checked = selected[c.id] ? 'checked' : '';
+            html += '<div class="checkbox"><label>' +
+                '<input type="checkbox" data-id="' + c.id + '" data-name="' + c.name.replace(/"/g, '&quot;') + '" data-phone="' + c.phone.replace(/"/g, '&quot;') + '" ' + checked + '>' +
+                '<strong>' + c.name + '</strong><br><small class="text-muted">' + c.phone + '</small>' +
+                '</label></div>';
+        });
+        contactsList.innerHTML = html;
+        contactsList.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    selected[this.dataset.id] = { name: this.dataset.name, phone: this.dataset.phone };
+                } else {
+                    delete selected[this.dataset.id];
+                }
+                renderSelected();
+            });
+        });
+    }
+
+    function search(q) {
+        fetch('<?php echo Yii::app()->createUrl("whatsappGroups/whatsappGroups/searchContacts"); ?>?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(renderResults)
+            .catch(function() {
+                contactsList.innerHTML = '<p class="text-muted" style="margin: 0;">Search failed — try again.</p>';
+            });
+    }
+
+    filterInput.addEventListener('keyup', function() {
+        var q = this.value.trim();
+        clearTimeout(searchTimer);
+        if (q === '') {
+            contactsList.innerHTML = '<p class="text-muted" style="margin: 0;">Start typing above to search contacts.</p>';
+            return;
+        }
+        searchTimer = setTimeout(function() { search(q); }, 300);
     });
+
     document.getElementById('selectNoneContacts').addEventListener('click', function(e) {
         e.preventDefault();
-        document.querySelectorAll('.contact-item input[type=checkbox]').forEach(function(cb) {
-            cb.checked = false;
-        });
+        selected = {};
+        renderSelected();
+        contactsList.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
     });
+
     document.getElementById('listId').addEventListener('change', function() {
         var manual = document.getElementById('manualContactsGroup');
         manual.style.display = this.value ? 'none' : '';
     });
+
+    // Inject one hidden input per selected contact right before submit,
+    // since checkboxes for contacts found under an earlier search term are
+    // no longer in the DOM by the time the form is submitted.
+    filterInput.closest('form').addEventListener('submit', function() {
+        var form = this;
+        Object.keys(selected).forEach(function(id) {
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'contacts[]';
+            input.value = id;
+            form.appendChild(input);
+        });
+    });
+})();
 </script>
 
 <style>

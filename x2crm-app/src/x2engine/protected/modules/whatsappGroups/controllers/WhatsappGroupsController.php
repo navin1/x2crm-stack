@@ -138,9 +138,52 @@ class WhatsappGroupsController extends x2base {
             }
         }
 
-        // Get all contacts for selection
-        $allContacts = Contacts::model()->findAll(array('limit' => 1000));
-        $this->render('create', array('contacts' => $allContacts, 'lists' => $this->getAccessibleContactLists()));
+        $this->render('create', array('lists' => $this->getAccessibleContactLists()));
+    }
+
+    /**
+     * Live search for the "Add Contacts" picker on the create/add-members
+     * pages — used instead of pre-loading every contact into the page, which
+     * silently truncated at a fixed limit and made any contact past that cut
+     * (irrespective of the search box) impossible to find or select on an
+     * install with more contacts than the limit. Only ever returns contacts
+     * with a phone number, since that's the only kind these pages can use.
+     */
+    public function actionSearchContacts() {
+        $q = trim(Yii::app()->request->getParam('q', ''));
+
+        $criteria = new CDbCriteria();
+        $criteria->addCondition('phone IS NOT NULL AND phone != ""');
+        if ($q !== '') {
+            // Built as its own criteria and merged in with AND, rather than
+            // calling addSearchCondition() twice directly on $criteria —
+            // doing it directly made the two conditions chain as
+            // ((phone-not-null AND name-match) OR phone-match) instead of
+            // (phone-not-null AND (name-match OR phone-match)), which
+            // matched on phone correctly (each match already implied a
+            // non-null phone) but let phone-matching short-circuit the name
+            // search's own logic, breaking name search specifically.
+            $searchCriteria = new CDbCriteria();
+            $searchCriteria->addSearchCondition('CONCAT(firstName, " ", lastName)', $q, true, 'OR');
+            $searchCriteria->addSearchCondition('phone', $q, true, 'OR');
+            $criteria->mergeWith($searchCriteria, 'AND');
+        }
+        $criteria->order = 'firstName ASC, lastName ASC';
+        $criteria->limit = 50;
+
+        $contacts = Contacts::model()->findAll($criteria);
+        $results = array();
+        foreach ($contacts as $contact) {
+            $results[] = array(
+                'id' => $contact->id,
+                'name' => $contact->name,
+                'phone' => $contact->phone,
+            );
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($results);
+        Yii::app()->end();
     }
 
     /**
@@ -171,11 +214,30 @@ class WhatsappGroupsController extends x2base {
      * numbers of its matching Contacts right now.
      */
     private function getListPhones($listId) {
-        $list = X2List::load($listId);
+        // Deliberately X2List::model()->findByPk() here, not X2List::load()
+        // — load() applies per-CURRENT-USER visibility scoping (via
+        // Yii::app()->user->getId()/getName()) meant for a real logged-in
+        // session. Every caller of this method is either an admin action
+        // or (WhatsappGroupsListPhones, wa-hub's server-to-server auto-sync
+        // poller) a trusted machine call with no logged-in user at all —
+        // both want the list's full, unrestricted membership, not a
+        // restriction scoped to whichever "current user" happens to be set.
+        // Confirmed live: calling this without a real session hits load()'s
+        // non-admin branch, where a guest's empty getId() produces a
+        // malformed "WHERE userId=" subquery fragment and a hard SQL error.
+        $list = X2List::model()->findByPk((int) $listId);
         if (!$list || $list->modelName !== 'Contacts') {
             throw new CException('List not found');
         }
-        $contacts = Contacts::model()->findAll($list->queryCriteria());
+        // false: skip queryCriteria()'s default extra per-CURRENT-USER
+        // record-level access restriction (X2Model::getAccessCriteria()) —
+        // same reasoning as bypassing X2List::load() above. A real admin
+        // caller already sees everything via that criteria anyway, so this
+        // is a no-op for them; a guest/machine caller like
+        // WhatsappGroupsListPhones has no sensible per-user access rule to
+        // apply at all, and without this the criteria resolves to
+        // effectively nothing rather than the list's true full membership.
+        $contacts = Contacts::model()->findAll($list->queryCriteria(false));
         $phones = array();
         foreach ($contacts as $contact) {
             if ($contact->phone) {
@@ -183,6 +245,39 @@ class WhatsappGroupsController extends x2base {
             }
         }
         return $phones;
+    }
+
+    /**
+     * Server-to-server only — resolves a list to its matching contacts'
+     * phone numbers for wa-hub's auto-sync poller, which has no login
+     * session. Same mechanism as MailerliteController::actionResolveListMembers
+     * (see its docblock): X2CRM doesn't use Yii's standard accessRules() at
+     * all, so guest access requires a real row in x2_auth_item named
+     * "WhatsappGroupsListPhones" (ucfirst(controllerId) + ucfirst(actionId))
+     * linked under GuestSiteFunctionsTask (see scripts/reconcile-custom-schema.sql)
+     * — those RBAC rows only get requests as far as this action running at
+     * all; the secret check below is what actually restricts it to the
+     * poller. Uses X2CRM_API_KEY as the shared secret since that's already
+     * the established trust anchor between wa-hub and X2CRM (the other
+     * direction of every other call between these two services), rather
+     * than introducing a separate secret for just this one endpoint.
+     */
+    public function actionListPhones($listId) {
+        $secret = getenv('X2CRM_API_KEY') ?: '';
+        $provided = (string) Yii::app()->request->getParam('secret', '');
+        header('Content-Type: application/json');
+        if (!$secret || !hash_equals($secret, $provided)) {
+            header('HTTP/1.1 403 Forbidden');
+            echo json_encode(array('ok' => false, 'error' => 'Forbidden'));
+            Yii::app()->end();
+        }
+
+        try {
+            echo json_encode(array('ok' => true, 'phones' => $this->getListPhones($listId)));
+        } catch (Exception $e) {
+            echo json_encode(array('ok' => false, 'error' => $e->getMessage()));
+        }
+        Yii::app()->end();
     }
 
     /**
@@ -260,6 +355,33 @@ class WhatsappGroupsController extends x2base {
                 Yii::app()->user->setFlash('success', $enabled ? 'New-lead notifications enabled for this group.' : 'New-lead notifications disabled for this group.');
             } else {
                 throw new CException(isset($result['error']) ? $result['error'] : 'Failed to update notification setting');
+            }
+        } catch (Exception $e) {
+            Yii::app()->user->setFlash('error', $e->getMessage());
+        }
+
+        $this->redirect(array('view', 'groupId' => $groupId));
+    }
+
+    /**
+     * Toggle whether a list-linked group gets automatically re-synced on a
+     * schedule (see wa-hub's pollAutoSyncGroups()), instead of only via the
+     * manual "Sync Now" button.
+     */
+    public function actionToggleAutoSync() {
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+
+        $groupId = Yii::app()->request->getPost('groupId');
+        $enabled = Yii::app()->request->getPost('enabled');
+
+        try {
+            $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/auto-sync', array('enabled' => (bool) $enabled));
+            if (isset($result['ok']) && $result['ok']) {
+                Yii::app()->user->setFlash('success', $enabled ? 'Auto-sync enabled for this group.' : 'Auto-sync disabled for this group.');
+            } else {
+                throw new CException(isset($result['error']) ? $result['error'] : 'Failed to update auto-sync setting');
             }
         } catch (Exception $e) {
             Yii::app()->user->setFlash('error', $e->getMessage());

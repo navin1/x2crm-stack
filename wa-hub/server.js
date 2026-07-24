@@ -253,7 +253,7 @@ async function notifyAdminNewForm({ name, url }) {
 async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel, since, logParams = {} }) {
   let watermark = since;
   const [leads] = await dbPool.execute(
-    'SELECT firstName, lastName, email, phone, company, title, backgroundInfo, createDate ' +
+    'SELECT firstName, lastName, email, phone, company, title, backgroundInfo, state, city, createDate ' +
     'FROM x2_x2leads WHERE leadSource = ? AND createDate > ? ORDER BY createDate ASC',
     [leadSource, since]
   );
@@ -296,6 +296,8 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
         company: lead.company || '',
         title: lead.title || '',
         message: lead.backgroundInfo || '',
+        state: lead.state || '',
+        city: lead.city || '',
       });
       await notifyGroupsOfNewLead({ text: groupText });
     } catch (e) {
@@ -321,6 +323,8 @@ const DEFAULT_LEAD_NOTIFY_TEMPLATE = [
   'Phone: {{phone}}',
   'Company: {{company}}',
   'Title: {{title}}',
+  'State: {{state}}',
+  'City: {{city}}',
   'Message: {{message}}',
 ].join('\n');
 
@@ -533,6 +537,42 @@ async function syncGroupMembersToPhones(groupId, desiredPhones = []) {
 
   await logAdminAction({ action: 'sync_group_members_to_list', params: { groupId, added: toAdd.length, removed: toRemove.length }, success: true });
   return { added: toAdd.length, removed: toRemove.length, total: desiredCleaned.size };
+}
+
+// A linked list's membership can change after its one-time "Sync Now"
+// click (new matches for a dynamic list, people added/removed from a
+// static one) — this keeps any group with autoSync enabled current, on
+// its own slower interval since re-resolving list criteria + a whole
+// group's membership diff is heavier than the 30s lead-notification
+// pollers. List membership itself can only be resolved X2CRM/PHP-side
+// (that's where X2List's query-criteria logic lives), so this calls back
+// into WhatsappGroupsController::actionListPhones over the internal
+// docker network — the same shape as integration/server.js's
+// pollAutoSyncLists() for MailerLite.
+const GROUP_AUTO_SYNC_INTERVAL_MS = Number(process.env.GROUP_AUTO_SYNC_INTERVAL_MS || 5 * 60 * 1000);
+const X2CRM_INTERNAL_URL = 'http://x2crm:80';
+
+async function pollAutoSyncGroups() {
+  if (!dbPool || !sock || !isOpen) return;
+  try {
+    const [groups] = await dbPool.execute('SELECT groupId, listId FROM wa_groups WHERE autoSync = 1 AND listId IS NOT NULL');
+    for (const group of groups) {
+      try {
+        const resp = await axios.get(`${X2CRM_INTERNAL_URL}/index.php/whatsappGroups/whatsappGroups/listPhones`, {
+          params: { listId: group.listId, secret: X2CRM_API_KEY },
+        });
+        if (!resp.data?.ok) {
+          console.warn(`wa-hub: could not resolve phones for list ${group.listId}:`, resp.data?.error);
+          continue;
+        }
+        await syncGroupMembersToPhones(group.groupId, resp.data.phones || []);
+      } catch (err) {
+        console.warn(`wa-hub: auto-sync failed for group ${group.groupId}:`, err.message || err);
+      }
+    }
+  } catch (err) {
+    console.error('wa-hub: pollAutoSyncGroups failed:', err.message || err);
+  }
 }
 
 async function addMembersToGroup(groupId, phoneNumbers = []) {
@@ -785,6 +825,17 @@ async function initDb() {
     if (!notifyCol[0] || notifyCol[0].cnt === 0) {
       await dbPool.execute('ALTER TABLE wa_groups ADD COLUMN notifyOnNewLead TINYINT(1) NOT NULL DEFAULT 0');
     }
+    // migrate: add autoSync to pre-existing wa_groups tables — flags a
+    // group (already linked to a list via listId) to be automatically
+    // re-synced on a schedule by pollAutoSyncGroups(), instead of only via
+    // the manual "Sync Now" button.
+    const [autoSyncCol] = await dbPool.execute(
+      "SELECT COUNT(*) as cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'wa_groups' AND COLUMN_NAME = 'autoSync'",
+      [DB_NAME]
+    );
+    if (!autoSyncCol[0] || autoSyncCol[0].cnt === 0) {
+      await dbPool.execute('ALTER TABLE wa_groups ADD COLUMN autoSync TINYINT(1) NOT NULL DEFAULT 0');
+    }
     // Single-row table holding the editable wording for the new-lead group
     // broadcast (see renderLeadNotifyTemplate()) — a fixed id=1 row rather
     // than a general key/value settings table, since this is the only
@@ -1027,6 +1078,12 @@ initDb().then(async () => {
     pollForNewWebFormLeads().catch((e) => console.warn('wa-hub: scheduled web form lead poll failed:', e.message || e));
   }, 30000);
 
+  // Auto-sync groups linked to a list, on a slower interval (see
+  // pollAutoSyncGroups() for why).
+  setInterval(() => {
+    pollAutoSyncGroups().catch((e) => console.warn('wa-hub: scheduled group auto-sync failed:', e.message || e));
+  }, GROUP_AUTO_SYNC_INTERVAL_MS);
+
   // Initialize Baileys WhatsApp socket
   console.log('wa-hub: initializing WhatsApp connection...');
   initBaileysSocket().catch((err) => console.warn('wa-hub: failed to initialize WhatsApp:', err.message || err));
@@ -1181,7 +1238,7 @@ app.delete('/admin/users/:username', requireAdmin, adminLimiter, async (req, res
 // GET /admin/groups - List all WhatsApp groups
 app.get('/admin/groups', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, notifyOnNewLead, createdAt, lastSyncedAt FROM wa_groups ORDER BY createdAt DESC');
+    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, notifyOnNewLead, autoSync, createdAt, lastSyncedAt FROM wa_groups ORDER BY createdAt DESC');
     
     // Get member counts
     const groupsWithCounts = await Promise.all(groups.map(async (g) => {
@@ -1198,7 +1255,7 @@ app.get('/admin/groups', requireAdmin, adminLimiter, async (req, res) => {
 // GET /admin/groups/:groupId - Get group details with members
 app.get('/admin/groups/:groupId', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [groupRows] = await dbPool.execute('SELECT id, groupId, groupName, subject, isSynced, listId, notifyOnNewLead, createdAt, lastSyncedAt FROM wa_groups WHERE groupId = ? LIMIT 1', [req.params.groupId]);
+    const [groupRows] = await dbPool.execute('SELECT id, groupId, groupName, subject, isSynced, listId, notifyOnNewLead, autoSync, createdAt, lastSyncedAt FROM wa_groups WHERE groupId = ? LIMIT 1', [req.params.groupId]);
     if (!groupRows || !groupRows[0]) return res.status(404).json({ error: 'group not found' });
     
     const group = groupRows[0];
@@ -1243,6 +1300,20 @@ app.post('/admin/groups/:groupId/notify-new-lead', requireAdmin, adminLimiter, a
     await dbPool.execute('UPDATE wa_groups SET notifyOnNewLead = ? WHERE groupId = ?', [enabled ? 1 : 0, req.params.groupId]);
     await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'toggle_notify_new_lead', params: { groupId: req.params.groupId, enabled }, success: true });
     res.json({ ok: true, notifyOnNewLead: enabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /admin/groups/:groupId/auto-sync - Toggle whether this group gets
+// automatically re-synced from its linked list on a schedule (see
+// pollAutoSyncGroups()), instead of only via the manual "Sync Now" button
+app.post('/admin/groups/:groupId/auto-sync', requireAdmin, adminLimiter, async (req, res) => {
+  const enabled = !!(req.body || {}).enabled;
+  try {
+    await dbPool.execute('UPDATE wa_groups SET autoSync = ? WHERE groupId = ?', [enabled ? 1 : 0, req.params.groupId]);
+    await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'toggle_auto_sync', params: { groupId: req.params.groupId, enabled }, success: true });
+    res.json({ ok: true, autoSync: enabled });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

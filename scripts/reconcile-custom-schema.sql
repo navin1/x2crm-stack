@@ -175,20 +175,23 @@ DEALLOCATE PREPARE stmt;
 
 -- ---------------------------------------------------------------------
 -- 3. Guest (unauthenticated) RBAC entries this stack added, so the public
---    lead-form endpoints and the MailerLite auto-sync poller keep working
---    without a login. Production's x2_auth_item / x2_auth_item_child won't
---    have these two custom action names at all.
+--    lead-form endpoints and the MailerLite/WhatsApp Groups auto-sync
+--    pollers keep working without a login. Production's x2_auth_item /
+--    x2_auth_item_child won't have these custom action names at all.
 -- ---------------------------------------------------------------------
 
 INSERT IGNORE INTO `x2_auth_item` (`name`, `type`, `description`, `bizrule`, `data`) VALUES
   ('ContactsWeblead', 0, '', NULL, 'N;'),
-  ('MailerliteResolveListMembers', 0, 'Server-to-server: resolve a Contacts list for the MailerLite auto-sync poller.', NULL, 'N;');
+  ('MailerliteResolveListMembers', 0, 'Server-to-server: resolve a Contacts list for the MailerLite auto-sync poller.', NULL, 'N;'),
+  ('WhatsappGroupsListPhones', 0, 'Server-to-server: resolve a Contacts list for the WhatsApp Groups auto-sync poller.', NULL, 'N;');
 
 INSERT IGNORE INTO `x2_auth_item_child` (`parent`, `child`) VALUES
   ('AuthenticatedSiteFunctionsTask', 'ContactsWeblead'),
   ('GuestSiteFunctionsTask', 'ContactsWeblead'),
   ('AuthenticatedSiteFunctionsTask', 'MailerliteResolveListMembers'),
-  ('GuestSiteFunctionsTask', 'MailerliteResolveListMembers');
+  ('GuestSiteFunctionsTask', 'MailerliteResolveListMembers'),
+  ('AuthenticatedSiteFunctionsTask', 'WhatsappGroupsListPhones'),
+  ('GuestSiteFunctionsTask', 'WhatsappGroupsListPhones');
 
 -- This production system's own `guest` auth item carries a broken bizrule:
 -- `return Yii::app()->user->isLoggedOut;` — `isLoggedOut` doesn't exist

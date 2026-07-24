@@ -42,6 +42,8 @@
                     <li><code>{{phone}}</code></li>
                     <li><code>{{company}}</code></li>
                     <li><code>{{title}}</code></li>
+                    <li><code>{{state}}</code></li>
+                    <li><code>{{city}}</code></li>
                     <li><code>{{message}}</code> &mdash; the lead's own message/background info field</li>
                 </ul>
 

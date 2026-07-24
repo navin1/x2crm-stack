@@ -53,7 +53,7 @@
         <div class="btn-group" style="margin-bottom: 15px;">
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
             <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
-            <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate')); ?>
+            <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
         </div>
 
         <?php if (!empty($groups)): ?>
@@ -125,6 +125,20 @@
     .btn-group .x2-button, .actions-cell .x2-button {
         float: none !important;
         margin: 0 !important;
+    }
+    /* No "orange" variant exists in the app's stock button classes (only
+       .highlight/green and .blue) — added here to match .blue's shape. */
+    .x2-button.orange {
+        background-color: #e8830f;
+        border-color: #c56d0a;
+        color: #fff;
+    }
+    .x2-button.orange:hover {
+        background-color: #cc7208;
+    }
+    .x2-button.orange:active, .x2-button.orange.clicked {
+        background-color: #a85e07;
+        box-shadow: inset 0 1px 1px 0 #8a4d05;
     }
     /* Wasn't defined anywhere on this page before — the "Synced" column's
        Yes/No labels were rendering as plain unstyled text with no colored
