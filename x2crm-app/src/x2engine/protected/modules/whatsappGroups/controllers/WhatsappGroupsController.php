@@ -209,7 +209,7 @@ class WhatsappGroupsController extends x2base {
             }
             $criteria->addCondition($condition);
         }
-        $criteria->order = 'createDate DESC';
+        $criteria->order = 'name ASC';
         return X2List::model()->findAll($criteria);
     }
 
@@ -480,7 +480,7 @@ class WhatsappGroupsController extends x2base {
             ->select('*')
             ->from('x2_web_forms')
             ->where('type=:type', array(':type' => 'weblead'))
-            ->order('id DESC')
+            ->order('name ASC')
             ->queryAll();
 
         $selectedForm = null;
@@ -831,7 +831,7 @@ class WhatsappGroupsController extends x2base {
             ->select('*')
             ->from('x2_web_forms')
             ->where('type=:type', array(':type' => 'weblead'))
-            ->order('id DESC')
+            ->order('name ASC')
             ->queryAll();
         $notifyMap = array();
         foreach (Yii::app()->db->createCommand()->select('*')->from('wa_webform_notify')->queryAll() as $row) {

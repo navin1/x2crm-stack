@@ -1344,7 +1344,7 @@ app.delete('/admin/users/:username', requireAdmin, adminLimiter, async (req, res
 // GET /admin/groups - List all WhatsApp groups
 app.get('/admin/groups', requireAdmin, adminLimiter, async (req, res) => {
   try {
-    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, notifyOnNewLead, autoSync, createdAt, lastSyncedAt FROM wa_groups ORDER BY createdAt DESC');
+    const [groups] = await dbPool.execute('SELECT id, groupId, groupName, subject, phoneNumber, isSynced, listId, notifyOnNewLead, autoSync, createdAt, lastSyncedAt FROM wa_groups ORDER BY groupName ASC');
     
     // Get member counts
     const groupsWithCounts = await Promise.all(groups.map(async (g) => {

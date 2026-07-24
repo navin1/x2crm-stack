@@ -176,13 +176,13 @@ class CreateWebFormAction extends CAction {
             if ($modelClass === 'Contacts') {
 
                 $criteria = X2Model::model('Marketing')->getAccessCriteria();
-                $condition = $criteria->condition;
+                $criteria->condition = 'type="weblead" AND ' . $criteria->condition;
+                $criteria->order = 'name ASC';
 
-                $forms = WebForm::model()
-                    ->findAll('type="weblead" AND '.$condition, $criteria->params);
+                $forms = WebForm::model()->findAll($criteria);
 
                 $this->controller->render(
-                    'application.modules.marketing.views.marketing.webleadForm', 
+                    'application.modules.marketing.views.marketing.webleadForm',
                     array('forms' => $forms));
             } else if ($modelClass === 'Services') {
                 $criteria = X2Model::model('Services')->getAccessCriteria();
