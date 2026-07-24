@@ -187,9 +187,11 @@ endif;
             <?php $help = Auxlib::isMac() ? "⌘-c to copy" : "ctrl-c to copy"; ?>
             <?php echo Yii::t('app', $help) ?></p></span>
             <?php if ($this->type === 'weblead'): ?>
-            <a class='x2-button blue manage-iframe-btn' href='<?php
-                echo CHtml::encode(Yii::app()->createUrl('/whatsappGroups/whatsappGroups/webFormNotify'));
-            ?>'><i class='fa fa-comment'></i> <?php echo Yii::t('marketing','Manage IFRAME'); ?></a>
+            <a class='x2-button blue manage-iframe-btn' id='manage-iframe-link'
+                href='<?php echo CHtml::encode(Yii::app()->createUrl('/whatsappGroups/whatsappGroups/webFormNotify')); ?>'
+                data-list-url='<?php echo CHtml::encode(Yii::app()->createUrl('/whatsappGroups/whatsappGroups/webFormNotify')); ?>'
+                data-view-url='<?php echo CHtml::encode(Yii::app()->createUrl('/whatsappGroups/whatsappGroups/webFormNotifyView')); ?>'
+            ><i class='fa fa-comment'></i> <?php echo Yii::t('marketing','Manage IFRAME'); ?></a>
             <?php endif; ?>
         </div>
     </div>

@@ -35,6 +35,13 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
                     <dt>Iframe URL:</dt>
                     <dd><code><?php echo CHtml::encode($iframeUrl); ?></code></dd>
 
+                    <dt>Live Preview:</dt>
+                    <dd>
+                        <iframe src="<?php echo CHtml::encode($iframeUrl); ?>" frameborder="0"
+                                allowtransparency="true" scrolling="auto"
+                                style="width: 100%; max-width: 420px; height: 480px; border: 1px solid #ddd;"></iframe>
+                    </dd>
+
                     <dt>Short Link:</dt>
                     <dd>
                         <?php if (!empty($form['tinyUrl'])): ?>

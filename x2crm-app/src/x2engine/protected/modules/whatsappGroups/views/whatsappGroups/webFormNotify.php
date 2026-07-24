@@ -13,11 +13,16 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 <div id="x2-layout">
     <div id="x2-layout-content">
         <div class="page-title icon custom-module"><h2>Web Form Notifications</h2></div>
-        <p class="text-muted" style="padding-left: 54px;">
-            Every form built at <a href="<?php echo CHtml::encode($this->createUrl('/marketing/marketing/webleadForm')); ?>">Marketing &gt; Web Lead Form</a>
-            is listed below. Click <strong>View</strong> on a form to see its iframe URL, short
-            link, QR code, and to manage its pracharak and WhatsApp group notifications.
-        </p>
+
+        <div class="panel panel-default">
+            <div class="panel-body">
+                <p class="text-muted" style="margin: 0;">
+                    Every form built at <a href="<?php echo CHtml::encode($this->createUrl('/marketing/marketing/webleadForm')); ?>">Marketing &gt; Web Lead Form</a>
+                    is listed below. Click <strong>View</strong> on a form to see its iframe URL, short
+                    link, QR code, and to manage its pracharak and WhatsApp group notifications.
+                </p>
+            </div>
+        </div>
 
         <?php if (Yii::app()->user->hasFlash('success')): ?>
             <div class="alert alert-success">
@@ -34,56 +39,60 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
         <div id="webform-delete-flash"></div>
 
         <?php if (!empty($forms)): ?>
-            <table class="table table-striped table-hover">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Status</th>
-                        <th>Notifications</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($forms as $f):
-                        $isScheduledPast = !empty($f['deactivateAt']) && $f['deactivateAt'] <= time();
-                        $isActive = !empty($f['active']) && !$isScheduledPast;
-                        $hasPracharak = isset($notifyMap[$f['id']]) && $notifyMap[$f['id']] !== '';
-                        $groupCount = isset($groupNotifyMap[$f['id']]) ? count($groupNotifyMap[$f['id']]) : 0;
-                    ?>
-                        <tr id="webform-row-<?php echo (int) $f['id']; ?>">
-                            <td><strong><?php echo CHtml::encode($f['name']); ?></strong></td>
-                            <td>
-                                <?php if (!$isActive): ?>
-                                    <span class="label label-danger"><?php echo $isScheduledPast ? 'Expired' : 'Deactivated'; ?></span>
-                                <?php elseif (!empty($f['deactivateAt'])): ?>
-                                    <span class="label label-warning">Active until <?php echo date('M j, g:i A', $f['deactivateAt']); ?></span>
-                                <?php else: ?>
-                                    <span class="label label-success">Active</span>
-                                <?php endif; ?>
-                            </td>
-                            <td>
-                                Pracharak:
-                                <span class="label <?php echo $hasPracharak ? 'label-success' : 'label-default'; ?>">
-                                    <?php echo $hasPracharak ? 'On' : 'Off'; ?>
-                                </span>
-                                &nbsp;
-                                Groups:
-                                <?php if ($groupCount > 0): ?>
-                                    <span class="label label-success"><?php echo $groupCount; ?> picked</span>
-                                <?php else: ?>
-                                    <span class="text-muted">default pool</span>
-                                <?php endif; ?>
-                            </td>
-                            <td class="actions-cell">
-                                <?php echo CHtml::link('View', array('webFormNotifyView', 'webFormId' => $f['id']), array('class' => 'x2-button')); ?>
-                                <button type="button" class="btn btn-sm btn-default webform-delete-btn"
-                                        data-id="<?php echo (int) $f['id']; ?>"
-                                        data-name="<?php echo CHtml::encode($f['name']); ?>">Delete</button>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div class="panel panel-default">
+                <div class="panel-body">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Notifications</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($forms as $f):
+                                $isScheduledPast = !empty($f['deactivateAt']) && $f['deactivateAt'] <= time();
+                                $isActive = !empty($f['active']) && !$isScheduledPast;
+                                $hasPracharak = isset($notifyMap[$f['id']]) && $notifyMap[$f['id']] !== '';
+                                $groupCount = isset($groupNotifyMap[$f['id']]) ? count($groupNotifyMap[$f['id']]) : 0;
+                            ?>
+                                <tr id="webform-row-<?php echo (int) $f['id']; ?>">
+                                    <td><strong><?php echo CHtml::encode($f['name']); ?></strong></td>
+                                    <td>
+                                        <?php if (!$isActive): ?>
+                                            <span class="label label-danger"><?php echo $isScheduledPast ? 'Expired' : 'Deactivated'; ?></span>
+                                        <?php elseif (!empty($f['deactivateAt'])): ?>
+                                            <span class="label label-warning">Active until <?php echo date('M j, g:i A', $f['deactivateAt']); ?></span>
+                                        <?php else: ?>
+                                            <span class="label label-success">Active</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        Pracharak:
+                                        <span class="label <?php echo $hasPracharak ? 'label-success' : 'label-default'; ?>">
+                                            <?php echo $hasPracharak ? 'On' : 'Off'; ?>
+                                        </span>
+                                        &nbsp;
+                                        Groups:
+                                        <?php if ($groupCount > 0): ?>
+                                            <span class="label label-success"><?php echo $groupCount; ?> picked</span>
+                                        <?php else: ?>
+                                            <span class="text-muted">default pool</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="actions-cell">
+                                        <?php echo CHtml::link('View', array('webFormNotifyView', 'webFormId' => $f['id']), array('class' => 'x2-button')); ?>
+                                        <button type="button" class="btn btn-sm btn-default webform-delete-btn"
+                                                data-id="<?php echo (int) $f['id']; ?>"
+                                                data-name="<?php echo CHtml::encode($f['name']); ?>">Delete</button>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         <?php else: ?>
             <div class="alert alert-info" style="max-width: 900px;">
                 No Web Lead Forms yet — build one at Marketing &gt; Web Lead Form first.
@@ -127,6 +136,8 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 </script>
 
 <style>
+    .panel { border: 1px solid #ddd; margin-bottom: 20px; }
+    .panel-body { padding: 15px; }
     .label { display: inline-block; padding: 4px 8px; border-radius: 3px; color: #fff; font-size: 13px; }
     .label-success { background-color: #28a745; }
     .label-warning { background-color: #e0a800; }

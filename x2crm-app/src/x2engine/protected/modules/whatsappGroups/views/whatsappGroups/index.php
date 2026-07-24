@@ -54,6 +54,8 @@
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
             <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
             <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
+            <?php echo CHtml::link('Web Form Notifications', array('webFormNotify'), array('class' => 'x2-button grey')); ?>
+            <?php echo CHtml::link('Lead Forms', array('/marketing/marketing/webleadForm'), array('class' => 'x2-button purple')); ?>
         </div>
 
         <?php if (!empty($groups)): ?>
@@ -139,6 +141,33 @@
     .x2-button.orange:active, .x2-button.orange.clicked {
         background-color: #a85e07;
         box-shadow: inset 0 1px 1px 0 #8a4d05;
+    }
+    /* Grey/purple variants, same shape as .orange above — used to
+       visually distinguish the Web Form Notifications / Lead Forms
+       buttons from the WhatsApp-specific actions to their left. */
+    .x2-button.grey {
+        background-color: #6c757d;
+        border-color: #5a6268;
+        color: #fff;
+    }
+    .x2-button.grey:hover {
+        background-color: #5a6268;
+    }
+    .x2-button.grey:active, .x2-button.grey.clicked {
+        background-color: #494f54;
+        box-shadow: inset 0 1px 1px 0 #3a3f43;
+    }
+    .x2-button.purple {
+        background-color: #6f42c1;
+        border-color: #59339d;
+        color: #fff;
+    }
+    .x2-button.purple:hover {
+        background-color: #59339d;
+    }
+    .x2-button.purple:active, .x2-button.purple.clicked {
+        background-color: #472980;
+        box-shadow: inset 0 1px 1px 0 #38206b;
     }
     /* Wasn't defined anywhere on this page before — the "Synced" column's
        Yes/No labels were rendering as plain unstyled text with no colored

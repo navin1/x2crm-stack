@@ -246,11 +246,24 @@ x2.WebFormDesigner = (function() {
             // extra behaviors set in child prototype
             that._afterSavedFormsChange ();
 
-            
+
             for (var i in that.codemirror) {
                 that.codemirror[i].setValue(that.codemirror[i].getTextArea().value);
             }
-            
+
+            // "Manage IFRAME" (weblead only) should go straight to the
+            // selected form's own detail page, not the general list — no
+            // way to know which form until one is actually selected here.
+            var $manageIframeLink = $('#manage-iframe-link');
+            if ($manageIframeLink.length) {
+                if (id != 0) {
+                    $manageIframeLink.attr('href',
+                        $manageIframeLink.data('view-url') + '?webFormId=' + encodeURIComponent(id));
+                } else {
+                    $manageIframeLink.attr('href', $manageIframeLink.data('list-url'));
+                }
+            }
+
         });
 
         // set up iframe resizing behavior
@@ -325,6 +338,20 @@ x2.WebFormDesigner = (function() {
         
 
         that._setUpTabs();
+
+        // Browsers restore a <select>'s value from history on back/forward
+        // navigation (e.g. arriving here via the Back button) without
+        // firing a native `change` event — the #saved-forms `change`
+        // handler above is the only code that shows #web-form-inner and
+        // loads that form's fields, so without this, a form left selected
+        // from a previous visit renders as if nothing were selected (just
+        // the always-visible unsub-preview section, which looks like a
+        // blank/wrong form). Reconcile once here, after everything else in
+        // _init() is wired up, if the browser has already restored a real
+        // selection by the time this runs.
+        if ($('#saved-forms').val() && $('#saved-forms').val() !== '0') {
+            $('#saved-forms').trigger('change');
+        }
 
     };
 
