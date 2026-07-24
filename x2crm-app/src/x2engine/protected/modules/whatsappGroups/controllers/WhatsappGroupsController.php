@@ -1859,9 +1859,10 @@ HTML;
      * thumbnails, the Web Lead Form detail page's QR picker), distinct
      * from qrImage which is specifically the WhatsApp pairing QR.
      * Optional $style ('plain' | 'logo-small' | 'logo-medium') composites
-     * the site's own login-screen logo into the center — resolved here
-     * (not by wa-hub, which has no access to X2CRM's Media system) and
-     * passed through as a fetchable URL.
+     * the site's own menu logo (X2CRM's top-bar icon, Media::getMenuLogo()
+     * — a small square mark, unlike the fuller login-screen wordmark) into
+     * the center — resolved here (not by wa-hub, which has no access to
+     * X2CRM's Media system) and passed through as a fetchable URL.
      */
     public function actionQrForUrl($url, $style = 'plain') {
         if (!Yii::app()->params->isAdmin) {
@@ -1870,8 +1871,8 @@ HTML;
 
         $qs = '?url=' . urlencode($url) . '&style=' . urlencode($style);
         if ($style === 'logo-small' || $style === 'logo-medium') {
-            $loginLogo = Media::getLoginLogo();
-            if ($loginLogo) {
+            $menuLogo = Media::getMenuLogo();
+            if ($menuLogo && $menuLogo->fileName !== 'uploads/protected/logos/yourlogohere.png') {
                 // Deliberately NOT getPublicUrl() — that builds a URL from
                 // the current request's Host header (e.g. localhost:8080
                 // locally, or the public HTTPS domain in production),
@@ -1880,7 +1881,7 @@ HTML;
                 // already talks to wa-hub: over the internal docker
                 // network, by service name.
                 $internalLogoUrl = 'http://x2crm/index.php/media/media/getFile/id/' .
-                    $loginLogo->id . '/key/' . $loginLogo->getAccessKey();
+                    $menuLogo->id . '/key/' . $menuLogo->getAccessKey();
                 $qs .= '&logoUrl=' . urlencode($internalLogoUrl);
             }
         }
