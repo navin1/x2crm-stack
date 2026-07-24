@@ -1,9 +1,11 @@
 <?php
 /**
- * Web Form Notifications (Administration Tools) — assign or change which
- * pracharak gets a WhatsApp message for each native Web Lead Form's
- * (marketing/webleadForm) submissions, and manage the form itself:
- * activate/deactivate now, schedule a future deactivation, or delete it.
+ * Web Form Notifications (Administration Tools) — compact list of every
+ * native Web Lead Form with a read-only notification summary. Click
+ * "View" for one form's full detail (iframe URL, short link, QR code,
+ * status/schedule management, and the pracharak + WhatsApp-group
+ * notification editor) — mirrors how WhatsApp Groups itself splits its
+ * own index()/view() pages.
  */
 $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 ?>
@@ -13,15 +15,8 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
         <div class="page-title icon custom-module"><h2>Web Form Notifications</h2></div>
         <p class="text-muted" style="padding-left: 54px;">
             Every form built at <a href="<?php echo CHtml::encode($this->createUrl('/marketing/marketing/webleadForm')); ?>">Marketing &gt; Web Lead Form</a>
-            is listed below with its iframe embed URL. Pick a pracharak for a form and every
-            submission through that form's iframe gets WhatsApped to them, usually within about a
-            minute. Leave it set to "&mdash; Off &mdash;" to disable notifications for that form.
-            You can change the assigned pracharak, activation state, or schedule at any time.
-            The pracharak choices come from the Contacts in a Contact List named exactly
-            <strong>Pracharak</strong> — add or remove someone there to change who's assignable
-            here. Optionally pick specific WhatsApp groups to notify for a form under "Notify
-            WhatsApp Groups" — if none are picked, the form falls back to every group with its
-            own "New-lead notifications" toggle on (set from that group's own page).
+            is listed below. Click <strong>View</strong> on a form to see its iframe URL, short
+            link, QR code, and to manage its pracharak and WhatsApp group notifications.
         </p>
 
         <?php if (Yii::app()->user->hasFlash('success')): ?>
@@ -38,45 +33,25 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 
         <div id="webform-delete-flash"></div>
 
-        <?php if (!$hasPracharakList): ?>
-            <div class="alert alert-danger">
-                <strong>No "Pracharak" contact list found.</strong> The pracharak dropdown below
-                will stay empty until one exists. Create a Contact List named exactly
-                <strong>Pracharak</strong> and add the people who should receive WhatsApp
-                notifications to it (as Contacts, each with a phone number) —
-                <a href="<?php echo CHtml::encode(Yii::app()->createUrl('/contacts/contacts/lists')); ?>">go to Contact Lists &rarr;</a>
-            </div>
-        <?php elseif (empty($pracharaks)): ?>
-            <div class="alert alert-danger">
-                <strong>The "Pracharak" list exists but has no assignable contacts.</strong>
-                Add Contacts to it, and make sure each one has a phone number —
-                <a href="<?php echo CHtml::encode(Yii::app()->createUrl('/contacts/contacts/lists')); ?>">go to Contact Lists &rarr;</a>
-            </div>
-        <?php endif; ?>
-
         <?php if (!empty($forms)): ?>
-            <div class="table-scroll">
-            <table class="table table-striped table-hover webform-notify-table">
+            <table class="table table-striped table-hover">
                 <thead>
                     <tr>
                         <th>Name</th>
-                        <th>Iframe URL</th>
                         <th>Status</th>
-                        <th>Notify Pracharak</th>
-                        <th>Notify WhatsApp Groups</th>
-                        <th>Manage</th>
+                        <th>Notifications</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($forms as $f):
-                        $iframeUrl = $hostInfo . '/index.php/contacts/contacts/weblead?webFormId=' . $f['id'];
-                        $current = isset($notifyMap[$f['id']]) ? $notifyMap[$f['id']] : '';
                         $isScheduledPast = !empty($f['deactivateAt']) && $f['deactivateAt'] <= time();
                         $isActive = !empty($f['active']) && !$isScheduledPast;
+                        $hasPracharak = isset($notifyMap[$f['id']]) && $notifyMap[$f['id']] !== '';
+                        $groupCount = isset($groupNotifyMap[$f['id']]) ? count($groupNotifyMap[$f['id']]) : 0;
                     ?>
                         <tr id="webform-row-<?php echo (int) $f['id']; ?>">
                             <td><strong><?php echo CHtml::encode($f['name']); ?></strong></td>
-                            <td><code><?php echo CHtml::encode($iframeUrl); ?></code></td>
                             <td>
                                 <?php if (!$isActive): ?>
                                     <span class="label label-danger"><?php echo $isScheduledPast ? 'Expired' : 'Deactivated'; ?></span>
@@ -86,81 +61,29 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                     <span class="label label-success">Active</span>
                                 <?php endif; ?>
                             </td>
-                            <?php $rowFormId = 'notify-form-' . (int) $f['id']; ?>
                             <td>
-                                <?php $rowForm = $this->beginWidget('CActiveForm', array(
-                                    'action' => array('saveWebFormNotify'),
-                                    'method' => 'POST',
-                                    'htmlOptions' => array('class' => 'notify-row', 'id' => $rowFormId),
-                                )); ?>
-                                    <input type="hidden" name="webFormId" value="<?php echo (int) $f['id']; ?>">
-                                    <select name="pracharakId" class="form-control" style="max-width: 240px; display: inline-block;">
-                                        <option value=""<?php echo $current === '' ? ' selected' : ''; ?>>&mdash; Off &mdash;</option>
-                                        <?php foreach ($pracharaks as $sp): ?>
-                                            <option value="<?php echo (int) $sp['id']; ?>"<?php echo (string) $current === (string) $sp['id'] ? ' selected' : ''; ?>>
-                                                <?php echo CHtml::encode($sp['name']); ?> (<?php echo CHtml::encode($sp['phone']); ?>)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                <?php $this->endWidget(); ?>
-                            </td>
-                            <td>
-                                <?php
-                                // Lives outside the <form> above (a <form> can't validly span
-                                // two <td>s in the same row) but still submits with it via the
-                                // HTML5 form="" attribute, so one Save covers both selections.
-                                $selectedGroups = isset($groupNotifyMap[$f['id']]) ? $groupNotifyMap[$f['id']] : array();
-                                ?>
-                                <select name="groupIds[]" form="<?php echo $rowFormId; ?>" multiple
-                                        class="form-control" style="max-width: 220px; height: 76px;">
-                                    <?php foreach ($groups as $g): ?>
-                                        <option value="<?php echo CHtml::encode($g['groupId']); ?>"
-                                            <?php echo in_array($g['groupId'], $selectedGroups, true) ? ' selected' : ''; ?>>
-                                            <?php echo CHtml::encode($g['groupName']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                                <?php echo CHtml::submitButton('Save', array(
-                                    'class' => 'btn btn-sm btn-primary', 'form' => $rowFormId,
-                                )); ?>
+                                Pracharak:
+                                <span class="label <?php echo $hasPracharak ? 'label-success' : 'label-default'; ?>">
+                                    <?php echo $hasPracharak ? 'On' : 'Off'; ?>
+                                </span>
+                                &nbsp;
+                                Groups:
+                                <?php if ($groupCount > 0): ?>
+                                    <span class="label label-success"><?php echo $groupCount; ?> picked</span>
+                                <?php else: ?>
+                                    <span class="text-muted">default pool</span>
+                                <?php endif; ?>
                             </td>
                             <td class="actions-cell">
-                                <div class="actions-row">
-                                    <?php if ($isActive): ?>
-                                        <?php echo CHtml::link('Deactivate Now', '#', array(
-                                            'class' => 'btn btn-sm btn-danger',
-                                            'submit' => array('deactivateWebForm', 'id' => $f['id']),
-                                            'csrf' => true,
-                                            'confirm' => 'Deactivate "' . CHtml::encode($f['name']) . '" immediately? Its iframe will stop accepting submissions wherever it is embedded.',
-                                        )); ?>
-                                    <?php else: ?>
-                                        <?php echo CHtml::link('Reactivate', '#', array(
-                                            'class' => 'btn btn-sm btn-success',
-                                            'submit' => array('reactivateWebForm', 'id' => $f['id']),
-                                            'csrf' => true,
-                                            'confirm' => 'Reactivate "' . CHtml::encode($f['name']) . '"?',
-                                        )); ?>
-                                    <?php endif; ?>
-                                    <button type="button" class="btn btn-sm btn-default webform-delete-btn"
-                                            data-id="<?php echo (int) $f['id']; ?>"
-                                            data-name="<?php echo CHtml::encode($f['name']); ?>">Delete</button>
-                                </div>
-                                <?php $schedForm = $this->beginWidget('CActiveForm', array(
-                                    'action' => array('scheduleWebFormDeactivation', 'id' => $f['id']),
-                                    'method' => 'POST',
-                                    'htmlOptions' => array('class' => 'schedule-row'),
-                                )); ?>
-                                    <input type="datetime-local" name="deactivateAt"
-                                           class="schedule-input"
-                                           value="<?php echo !empty($f['deactivateAt']) ? date('Y-m-d\TH:i', $f['deactivateAt']) : ''; ?>">
-                                    <?php echo CHtml::submitButton('Set Schedule', array('class' => 'btn btn-xs btn-default')); ?>
-                                <?php $this->endWidget(); ?>
+                                <?php echo CHtml::link('View', array('webFormNotifyView', 'webFormId' => $f['id']), array('class' => 'x2-button')); ?>
+                                <button type="button" class="btn btn-sm btn-default webform-delete-btn"
+                                        data-id="<?php echo (int) $f['id']; ?>"
+                                        data-name="<?php echo CHtml::encode($f['name']); ?>">Delete</button>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
-            </div>
         <?php else: ?>
             <div class="alert alert-info" style="max-width: 900px;">
                 No Web Lead Forms yet — build one at Marketing &gt; Web Lead Form first.
@@ -204,24 +127,13 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
 </script>
 
 <style>
-    .form-control { display: block; width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
     .label { display: inline-block; padding: 4px 8px; border-radius: 3px; color: #fff; font-size: 13px; }
     .label-success { background-color: #28a745; }
     .label-warning { background-color: #e0a800; }
     .label-danger { background-color: #dc3545; }
-    .btn-success { background-color: #28a745; color: #fff; border-color: #28a745; }
-    .btn-xs { padding: 3px 8px; font-size: 12px; }
-    .table-scroll { overflow-x: auto; margin-bottom: 20px; }
-    .webform-notify-table { min-width: 1350px; border-collapse: separate; border-spacing: 0; }
-    .webform-notify-table th,
-    .webform-notify-table td { padding: 14px 16px; vertical-align: top; white-space: nowrap; }
-    .webform-notify-table td.actions-cell { white-space: normal; }
-    .actions-cell { min-width: 260px; }
-    .actions-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-    .actions-row .btn { margin: 0; }
-    .notify-row { display: flex; align-items: center; gap: 8px; margin: 0; }
-    .schedule-row { display: flex; align-items: center; gap: 8px; }
-    .schedule-input { font-size: 12px; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .label-default { background-color: #6c757d; }
+    .actions-cell { display: flex; gap: 8px; align-items: center; }
+    .actions-cell .x2-button { float: none !important; margin: 0 !important; }
     .alert { padding: 12px 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
     .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }

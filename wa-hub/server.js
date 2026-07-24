@@ -192,13 +192,11 @@ async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption } 
   }
 }
 
-// Notifies the admin (message-to-self on the linked WhatsApp account) about
-// a newly registered lead-capture form: its URL, a scannable QR code of
-// that URL, and a shortened tinyurl.com link for easy sharing.
-async function notifyAdminNewForm({ name, url }) {
-  const qrBuffer = await QRCode.toBuffer(url, { type: 'png', width: 320, margin: 2 });
-
-  let tinyUrl = null;
+// Standalone tinyurl.com lookup, no side effects — used both by
+// notifyAdminNewForm() below and the standalone /admin/tinyurl endpoint
+// (for admin pages that just want a short link without sending a WhatsApp
+// message, e.g. a Web Lead Form's own detail page).
+async function getTinyUrl(url) {
   try {
     // Deliberately not using axios's `params` option here: its default
     // query serializer leaves ':' unencoded (produces
@@ -210,11 +208,20 @@ async function notifyAdminNewForm({ name, url }) {
       { timeout: 8000 }
     );
     if (typeof resp.data === 'string' && resp.data.startsWith('http')) {
-      tinyUrl = resp.data.trim();
+      return resp.data.trim();
     }
   } catch (e) {
     console.warn('wa-hub: tinyurl.com request failed, continuing without a short link:', e.message || e);
   }
+  return null;
+}
+
+// Notifies the admin (message-to-self on the linked WhatsApp account) about
+// a newly registered lead-capture form: its URL, a scannable QR code of
+// that URL, and a shortened tinyurl.com link for easy sharing.
+async function notifyAdminNewForm({ name, url }) {
+  const qrBuffer = await QRCode.toBuffer(url, { type: 'png', width: 320, margin: 2 });
+  const tinyUrl = await getTinyUrl(url);
 
   const lines = [
     `New lead form created: *${name}*`,
@@ -1647,6 +1654,16 @@ app.post('/admin/notify-new-form', requireAdmin, adminLimiter, async (req, res) 
     await logAdminAction({ adminUser: req.adminUser || null, ip: req.ip, action: 'notify_new_form', params: { name, url }, success: false, error: err.message });
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+// GET /admin/tinyurl?url=... - Standalone tinyurl.com lookup, no side
+// effects (distinct from /admin/notify-new-form, which also sends a
+// WhatsApp message) — used by admin pages that just want a short link.
+app.get('/admin/tinyurl', requireAdmin, async (req, res) => {
+  const { url } = req.query || {};
+  if (!url) return res.status(400).json({ error: 'url query param required' });
+  const tinyUrl = await getTinyUrl(url);
+  res.json({ tinyUrl });
 });
 
 // GET /admin/qr-for-url.png?url=... - Generic QR code image for any URL

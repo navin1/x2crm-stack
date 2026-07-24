@@ -816,9 +816,11 @@ class WhatsappGroupsController extends x2base {
 
     /**
      * Admin-only registry of X2CRM's native Web Lead Forms (the ones built
-     * and given an iframe embed code at marketing/webleadForm) — lets you
-     * pick which pracharak gets a WhatsApp message for each form's
-     * submissions, and change that choice at any time.
+     * and given an iframe embed code at marketing/webleadForm) — a compact
+     * list with a read-only notification summary per form; the actual
+     * pracharak/group editing, iframe URL, short link, and QR code live on
+     * actionWebFormNotifyView() below (one form's full detail), matching
+     * how index()/view() are split for WhatsApp Groups themselves.
      */
     public function actionWebFormNotify() {
         if (!Yii::app()->params->isAdmin) {
@@ -831,16 +833,9 @@ class WhatsappGroupsController extends x2base {
             ->where('type=:type', array(':type' => 'weblead'))
             ->order('id DESC')
             ->queryAll();
-        $pracharaks = $this->getPracharakContacts();
         $notifyMap = array();
         foreach (Yii::app()->db->createCommand()->select('*')->from('wa_webform_notify')->queryAll() as $row) {
             $notifyMap[$row['webFormId']] = $row['pracharakId'];
-        }
-
-        try {
-            $groups = $this->callWaHub('GET', '/admin/groups');
-        } catch (Exception $e) {
-            $groups = array();
         }
         $groupNotifyMap = array(); // webFormId => array of groupId (WhatsApp JID strings)
         $groupMapRows = Yii::app()->db->createCommand()
@@ -854,12 +849,78 @@ class WhatsappGroupsController extends x2base {
 
         $this->render('webFormNotify', array(
             'forms' => $forms,
+            'notifyMap' => $notifyMap,
+            'groupNotifyMap' => $groupNotifyMap,
+        ));
+    }
+
+    /**
+     * One Web Lead Form's full detail — iframe URL, a cached tinyurl.com
+     * short link, a scannable QR code (reusing actionQrForUrl(), the same
+     * proxy the Lead Forms list already uses), status/schedule management,
+     * and the combined pracharak + WhatsApp-group notification editor.
+     * Mirrors actionView($groupId) for WhatsApp Groups — same page shape.
+     */
+    public function actionWebFormNotifyView($webFormId) {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        $this->ensureWebFormManagementColumns();
+
+        $form = Yii::app()->db->createCommand()
+            ->select('*')->from('x2_web_forms')
+            ->where('id=:id AND type=:type', array(':id' => $webFormId, ':type' => 'weblead'))
+            ->queryRow();
+        if (!$form) {
+            Yii::app()->user->setFlash('error', 'Form not found.');
+            $this->redirect(array('webFormNotify'));
+        }
+
+        $iframeUrl = rtrim(Yii::app()->request->getHostInfo(), '/') .
+            '/index.php/contacts/contacts/weblead?webFormId=' . $form['id'];
+
+        // Cache the short link once per form — same tinyurl.com lookup
+        // x2_custom_lead_forms already uses, just without the WhatsApp
+        // message side-effect that endpoint normally sends.
+        if (empty($form['tinyUrl'])) {
+            try {
+                $result = $this->callWaHub('GET', '/admin/tinyurl?url=' . urlencode($iframeUrl));
+                if (!empty($result['tinyUrl'])) {
+                    Yii::app()->db->createCommand()->update('x2_web_forms',
+                        array('tinyUrl' => $result['tinyUrl']), 'id=:id', array(':id' => $webFormId));
+                    $form['tinyUrl'] = $result['tinyUrl'];
+                }
+            } catch (Exception $e) {
+                // Non-fatal — page still renders with just the raw iframe URL.
+            }
+        }
+
+        $pracharaks = $this->getPracharakContacts();
+        try {
+            $groups = $this->callWaHub('GET', '/admin/groups');
+        } catch (Exception $e) {
+            $groups = array();
+        }
+        $currentPracharak = Yii::app()->db->createCommand()
+            ->select('pracharakId')->from('wa_webform_notify')
+            ->where('webFormId=:id', array(':id' => $webFormId))
+            ->queryScalar();
+        $currentGroups = array();
+        if (!empty($form['leadSource'])) {
+            $currentGroups = Yii::app()->db->createCommand()
+                ->select('groupId')->from('wa_lead_notify_group_map')
+                ->where('leadSource=:ls', array(':ls' => $form['leadSource']))
+                ->queryColumn();
+        }
+
+        $this->render('webFormNotifyView', array(
+            'form' => $form,
+            'iframeUrl' => $iframeUrl,
             'pracharaks' => $pracharaks === null ? array() : $pracharaks,
             'hasPracharakList' => $pracharaks !== null,
-            'notifyMap' => $notifyMap,
             'groups' => $groups,
-            'groupNotifyMap' => $groupNotifyMap,
-            'hostInfo' => rtrim(Yii::app()->request->getHostInfo(), '/'),
+            'currentPracharak' => $currentPracharak === false ? '' : $currentPracharak,
+            'currentGroups' => $currentGroups,
         ));
     }
 
@@ -976,7 +1037,7 @@ class WhatsappGroupsController extends x2base {
             Yii::app()->user->setFlash('error', $e->getMessage());
         }
 
-        $this->redirect(array('webFormNotify'));
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $webFormId));
     }
 
     /**
@@ -1003,6 +1064,13 @@ class WhatsappGroupsController extends x2base {
         if (!$hasDeactivateAt) {
             $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN deactivateAt BIGINT NULL")->execute();
         }
+        $hasTinyUrl = $db->createCommand(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS " .
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'x2_web_forms' AND COLUMN_NAME = 'tinyUrl'"
+        )->queryScalar();
+        if (!$hasTinyUrl) {
+            $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN tinyUrl VARCHAR(255) NULL")->execute();
+        }
     }
 
     /**
@@ -1021,7 +1089,7 @@ class WhatsappGroupsController extends x2base {
         $this->ensureWebFormManagementColumns();
         Yii::app()->db->createCommand()->update('x2_web_forms', array('active' => 0), 'id=:id', array(':id' => $id));
         Yii::app()->user->setFlash('success', 'Form deactivated.');
-        $this->redirect(array('webFormNotify'));
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $id));
     }
 
     /**
@@ -1040,7 +1108,7 @@ class WhatsappGroupsController extends x2base {
         Yii::app()->db->createCommand()->update('x2_web_forms',
             array('active' => 1, 'deactivateAt' => null), 'id=:id', array(':id' => $id));
         Yii::app()->user->setFlash('success', 'Form reactivated.');
-        $this->redirect(array('webFormNotify'));
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $id));
     }
 
     /**
@@ -1061,7 +1129,7 @@ class WhatsappGroupsController extends x2base {
         Yii::app()->user->setFlash('success', $deactivateAt
             ? 'Scheduled deactivation set for ' . date('M j, Y g:i A', $deactivateAt) . '.'
             : 'Scheduled deactivation cleared.');
-        $this->redirect(array('webFormNotify'));
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $id));
     }
 
     /**
