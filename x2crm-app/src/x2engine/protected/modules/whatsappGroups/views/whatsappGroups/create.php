@@ -50,9 +50,7 @@
 
                         <div id="selectedContactsList" style="margin-bottom: 10px;"></div>
 
-                        <div id="contactsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #fafafa;">
-                            <p class="text-muted" style="margin: 0;">Start typing above to search contacts.</p>
-                        </div>
+                        <div id="contactsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #fafafa;"></div>
                     </div>
 
                     <div style="margin-top: 20px;">
@@ -142,7 +140,7 @@
         var q = this.value.trim();
         clearTimeout(searchTimer);
         if (q === '') {
-            contactsList.innerHTML = '<p class="text-muted" style="margin: 0;">Start typing above to search contacts.</p>';
+            contactsList.innerHTML = '';
             return;
         }
         searchTimer = setTimeout(function() { search(q); }, 300);

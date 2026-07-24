@@ -112,8 +112,9 @@ class WhatsappGroupsController extends x2base {
                     if (!empty($selectedContacts)) {
                         $contacts = Contacts::model()->findAllByPk($selectedContacts);
                         foreach ($contacts as $contact) {
-                            if ($contact->phone) {
-                                $phones[] = $contact->phone;
+                            $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
+                            if ($phone) {
+                                $phones[] = $phone;
                             }
                         }
                     }
@@ -240,11 +241,66 @@ class WhatsappGroupsController extends x2base {
         $contacts = Contacts::model()->findAll($list->queryCriteria(false));
         $phones = array();
         foreach ($contacts as $contact) {
-            if ($contact->phone) {
-                $phones[] = $contact->phone;
+            $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
+            if ($phone) {
+                $phones[] = $phone;
             }
         }
         return $phones;
+    }
+
+    /**
+     * Normalizes a Contact's phone into the full international format
+     * WhatsApp needs (country code + number, no leading zero/plus).
+     * Confirmed live: ~93% of this install's contacts have their phone
+     * stored as a bare 10-digit local number with no country code at all —
+     * exactly WhatsApp-uninvitable as-is, which is why syncs/adds were
+     * silently failing. Deliberately conservative: only touches numbers
+     * that are EXACTLY 10 digits (the confirmed "missing country code"
+     * shape here), leaves anything longer alone rather than risk
+     * mis-prepending an already-correct number, and returns null (skip,
+     * don't guess) when the contact's own country field isn't one this
+     * maps confidently — a wrong guessed country code could add/message a
+     * real, unrelated person in a different country who happens to share
+     * that local number pattern.
+     */
+    private function toWhatsAppPhone($rawPhone, $country) {
+        $digits = preg_replace('/\D/', '', (string) $rawPhone);
+        if ($digits === '') {
+            return null;
+        }
+        if (strlen($digits) !== 10) {
+            return $digits;
+        }
+        $callingCode = $this->countryCallingCode($country);
+        return $callingCode === null ? null : ($callingCode . $digits);
+    }
+
+    /**
+     * Calling codes for the country values actually seen in this
+     * install's data (checked live via a GROUP BY on x2_contacts.country
+     * for 10-digit phones) — a free-text field, so it includes several
+     * spelling variants of the same country. Anything not listed here
+     * (blank, a city/zip code mistakenly entered as the country, etc.)
+     * returns null from here and is skipped by toWhatsAppPhone() rather
+     * than guessed.
+     */
+    private function countryCallingCode($country) {
+        static $callingCodes = array(
+            'usa' => '1', 'us' => '1', 'usa-in' => '1',
+            'united states' => '1', 'united states of america' => '1', 'unitedstates' => '1',
+            'canada' => '1', 'canada-in' => '1',
+            'india' => '91',
+            'russia' => '7',
+            'mexico' => '52',
+            'australia' => '61',
+            'malaysia' => '60',
+            'nepal' => '977',
+            'united arab emirates' => '971',
+            'suriname' => '597',
+        );
+        $key = strtolower(trim((string) $country));
+        return isset($callingCodes[$key]) ? $callingCodes[$key] : null;
     }
 
     /**
@@ -320,10 +376,26 @@ class WhatsappGroupsController extends x2base {
 
         try {
             $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/link-list', array('listId' => $listId ?: null));
-            if (isset($result['ok']) && $result['ok']) {
-                Yii::app()->user->setFlash('success', $listId ? 'List linked' : 'List unlinked');
-            } else {
+            if (!isset($result['ok']) || !$result['ok']) {
                 throw new CException(isset($result['error']) ? $result['error'] : 'Failed to link list');
+            }
+
+            // Linking a list only sets which list a group follows — it
+            // doesn't by itself add any WhatsApp members. Without this, the
+            // group stays empty until either the auto-sync poller happens
+            // to run (up to several minutes later) or someone remembers to
+            // separately click "Sync Now", which looked like linking a list
+            // simply didn't do anything.
+            if ($listId) {
+                $phones = $this->getListPhones($listId);
+                $syncResult = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/sync-members', array('phones' => $phones));
+                if (isset($syncResult['ok']) && $syncResult['ok']) {
+                    Yii::app()->user->setFlash('success', "List linked and synced: added {$syncResult['added']} member(s).");
+                } else {
+                    Yii::app()->user->setFlash('success', 'List linked, but the initial member sync failed — use "Sync Now" to retry.');
+                }
+            } else {
+                Yii::app()->user->setFlash('success', 'List unlinked');
             }
         } catch (Exception $e) {
             Yii::app()->user->setFlash('error', $e->getMessage());
@@ -482,8 +554,9 @@ class WhatsappGroupsController extends x2base {
             if (!empty($selectedContacts)) {
                 $contacts = Contacts::model()->findAllByPk($selectedContacts);
                 foreach ($contacts as $contact) {
-                    if ($contact->phone) {
-                        $phones[] = $contact->phone;
+                    $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
+                    if ($phone) {
+                        $phones[] = $phone;
                     }
                 }
             }
