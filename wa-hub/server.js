@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
+const { Jimp } = require('jimp');
 
 process.on('unhandledRejection', (reason) => {
   console.error('wa-hub: unhandled rejection:', reason && reason.message || reason);
@@ -214,6 +215,57 @@ async function getTinyUrl(url) {
     console.warn('wa-hub: tinyurl.com request failed, continuing without a short link:', e.message || e);
   }
   return null;
+}
+
+// Renders a QR code for `url`, optionally with a logo composited in the
+// center. Always generated at error-correction level H (~30% of the code
+// recoverable) — required for a logo to sit in the middle without making
+// the code unreadable; harmless overhead for the plain style too, so this
+// stays one code path instead of branching error-correction by style.
+// `style`: 'plain' (default/fallback) | 'logo-small' (~18% width) |
+// 'logo-medium' (~24% width). `logoUrl` is fetched fresh each call rather
+// than cached here — X2CRM (the caller) already knows the right logo URL
+// via Media::getLoginLogo(), this just composites whatever it's given.
+async function renderQrPng(url, style, logoUrl) {
+  const qrBuffer = await QRCode.toBuffer(url, {
+    type: 'png',
+    errorCorrectionLevel: 'H',
+    width: 400,
+    margin: 2,
+  });
+
+  if ((style !== 'logo-small' && style !== 'logo-medium') || !logoUrl) {
+    return qrBuffer;
+  }
+
+  try {
+    const logoResp = await axios.get(logoUrl, { responseType: 'arraybuffer', timeout: 8000 });
+    const qrImg = await Jimp.read(qrBuffer);
+    const logoImg = await Jimp.read(Buffer.from(logoResp.data));
+
+    const scale = style === 'logo-small' ? 0.18 : 0.24;
+    const pad = style === 'logo-small' ? 8 : 10;
+    const targetWidth = Math.round(qrImg.bitmap.width * scale);
+    logoImg.scale(targetWidth / logoImg.bitmap.width);
+
+    const padded = new Jimp({
+      width: logoImg.bitmap.width + pad * 2,
+      height: logoImg.bitmap.height + pad * 2,
+      color: 0xffffffff,
+    });
+    padded.composite(logoImg, pad, pad);
+
+    const x = Math.round((qrImg.bitmap.width - padded.bitmap.width) / 2);
+    const y = Math.round((qrImg.bitmap.height - padded.bitmap.height) / 2);
+    qrImg.composite(padded, x, y);
+
+    return await qrImg.getBuffer('image/png');
+  } catch (e) {
+    // Logo fetch/composite failed (e.g. the logo URL is unreachable) —
+    // fall back to the plain code rather than erroring the whole request.
+    console.warn('wa-hub: QR logo compositing failed, falling back to plain:', e.message || e);
+    return qrBuffer;
+  }
 }
 
 // Notifies the admin (message-to-self on the linked WhatsApp account) about
@@ -1666,14 +1718,16 @@ app.get('/admin/tinyurl', requireAdmin, async (req, res) => {
   res.json({ tinyUrl });
 });
 
-// GET /admin/qr-for-url.png?url=... - Generic QR code image for any URL
-// (used for the lead-forms admin list, distinct from /admin/qr.png which is
-// specifically the WhatsApp pairing QR)
+// GET /admin/qr-for-url.png?url=...&style=plain|logo-small|logo-medium&logoUrl=...
+// Generic QR code image for any URL (used for the lead-forms admin list and
+// the Web Lead Form detail page's QR picker; distinct from /admin/qr.png,
+// which is specifically the WhatsApp pairing QR and never gets a logo).
+// style/logoUrl are both optional — omitting either just renders a plain code.
 app.get('/admin/qr-for-url.png', requireAdmin, async (req, res) => {
-  const { url } = req.query || {};
+  const { url, style, logoUrl } = req.query || {};
   if (!url) return res.status(400).json({ error: 'url query param required' });
   try {
-    const buffer = await QRCode.toBuffer(url, { type: 'png', width: 240, margin: 2 });
+    const buffer = await renderQrPng(url, style, logoUrl);
     res.set('Content-Type', 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
     res.send(buffer);

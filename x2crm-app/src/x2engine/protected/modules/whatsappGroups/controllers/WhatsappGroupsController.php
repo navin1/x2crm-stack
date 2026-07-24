@@ -940,16 +940,54 @@ class WhatsappGroupsController extends x2base {
                 ->queryColumn();
         }
 
+        $qrStyles = array('plain', 'logo-small', 'logo-medium');
+        $qrUrls = array();
+        foreach ($qrStyles as $s) {
+            $qrUrls[$s] = $this->createUrl('qrForUrl', array('url' => $targetUrl, 'style' => $s));
+        }
+
         $this->render('webFormNotifyView', array(
             'form' => $form,
             'iframeUrl' => $iframeUrl,
             'targetUrl' => $targetUrl,
+            'qrUrls' => $qrUrls,
+            'currentQrStyle' => !empty($form['qrStyle']) ? $form['qrStyle'] : 'plain',
             'pracharaks' => $pracharaks === null ? array() : $pracharaks,
             'hasPracharakList' => $pracharaks !== null,
             'groups' => $groups,
             'currentPracharak' => $currentPracharak === false ? '' : $currentPracharak,
             'currentGroups' => $currentGroups,
         ));
+    }
+
+    /**
+     * Persists which QR style (plain / small logo / medium logo) a Web
+     * Lead Form's detail page should show as "the" QR code going forward.
+     * Purely cosmetic/no side effects beyond this one column — the actual
+     * image is always generated fresh by wa-hub's qr-for-url.png, nothing
+     * to regenerate or invalidate here.
+     */
+    public function actionSaveQrStyle() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+        $this->ensureWebFormManagementColumns();
+
+        $webFormId = (int) Yii::app()->request->getPost('webFormId');
+        $qrStyle = Yii::app()->request->getPost('qrStyle', 'plain');
+        $validStyles = array('plain', 'logo-small', 'logo-medium');
+        if (!in_array($qrStyle, $validStyles, true)) {
+            $qrStyle = 'plain';
+        }
+
+        Yii::app()->db->createCommand()->update('x2_web_forms',
+            array('qrStyle' => $qrStyle), 'id=:id', array(':id' => $webFormId));
+        Yii::app()->user->setFlash('success', 'QR code style saved.');
+
+        $this->redirect(array('webFormNotifyView', 'webFormId' => $webFormId));
     }
 
     /**
@@ -1142,6 +1180,13 @@ class WhatsappGroupsController extends x2base {
         )->queryScalar();
         if (!$hasCustomUrl) {
             $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN customUrl VARCHAR(500) NULL")->execute();
+        }
+        $hasQrStyle = $db->createCommand(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS " .
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'x2_web_forms' AND COLUMN_NAME = 'qrStyle'"
+        )->queryScalar();
+        if (!$hasQrStyle) {
+            $db->createCommand("ALTER TABLE x2_web_forms ADD COLUMN qrStyle VARCHAR(20) NOT NULL DEFAULT 'plain'")->execute();
         }
     }
 
@@ -1811,15 +1856,36 @@ HTML;
 
     /**
      * Proxies a QR code image for an arbitrary URL (lead form list
-     * thumbnails), distinct from qrImage which is specifically the
-     * WhatsApp pairing QR.
+     * thumbnails, the Web Lead Form detail page's QR picker), distinct
+     * from qrImage which is specifically the WhatsApp pairing QR.
+     * Optional $style ('plain' | 'logo-small' | 'logo-medium') composites
+     * the site's own login-screen logo into the center — resolved here
+     * (not by wa-hub, which has no access to X2CRM's Media system) and
+     * passed through as a fetchable URL.
      */
-    public function actionQrForUrl($url) {
+    public function actionQrForUrl($url, $style = 'plain') {
         if (!Yii::app()->params->isAdmin) {
             throw new CHttpException(403, 'Admin access required');
         }
 
-        $ch = curl_init($this->waHubUrl . '/admin/qr-for-url.png?url=' . urlencode($url));
+        $qs = '?url=' . urlencode($url) . '&style=' . urlencode($style);
+        if ($style === 'logo-small' || $style === 'logo-medium') {
+            $loginLogo = Media::getLoginLogo();
+            if ($loginLogo) {
+                // Deliberately NOT getPublicUrl() — that builds a URL from
+                // the current request's Host header (e.g. localhost:8080
+                // locally, or the public HTTPS domain in production),
+                // neither of which wa-hub's separate container can reach.
+                // wa-hub talks to this app the same way this controller
+                // already talks to wa-hub: over the internal docker
+                // network, by service name.
+                $internalLogoUrl = 'http://x2crm/index.php/media/media/getFile/id/' .
+                    $loginLogo->id . '/key/' . $loginLogo->getAccessKey();
+                $qs .= '&logoUrl=' . urlencode($internalLogoUrl);
+            }
+        }
+
+        $ch = curl_init($this->waHubUrl . '/admin/qr-for-url.png' . $qs);
         curl_setopt($ch, CURLOPT_USERPWD, $this->waHubUser . ':' . $this->waHubPass);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);

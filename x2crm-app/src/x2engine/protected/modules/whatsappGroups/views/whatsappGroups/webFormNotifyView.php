@@ -89,8 +89,34 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
 
                     <dt>QR Code:</dt>
                     <dd>
-                        <img src="<?php echo CHtml::encode($this->createUrl('qrForUrl', array('url' => $targetUrl))); ?>"
-                             alt="QR code" style="width: 160px; height: 160px;">
+                        <?php $qrLabels = array(
+                            'plain' => 'Plain',
+                            'logo-small' => 'Small logo',
+                            'logo-medium' => 'Medium logo',
+                        ); ?>
+                        <?php $qrStyleForm = $this->beginWidget('CActiveForm', array(
+                            'action' => array('saveQrStyle'),
+                            'method' => 'POST',
+                        )); ?>
+                            <input type="hidden" name="webFormId" value="<?php echo (int) $form['id']; ?>">
+                            <div class="qr-style-options">
+                                <?php foreach ($qrUrls as $style => $qrUrl): ?>
+                                    <label class="qr-style-option<?php echo $currentQrStyle === $style ? ' is-selected' : ''; ?>">
+                                        <img src="<?php echo CHtml::encode($qrUrl); ?>" alt="QR code — <?php echo CHtml::encode($qrLabels[$style]); ?>">
+                                        <span>
+                                            <input type="radio" name="qrStyle" value="<?php echo CHtml::encode($style); ?>"
+                                                <?php echo $currentQrStyle === $style ? ' checked' : ''; ?>>
+                                            <?php echo CHtml::encode($qrLabels[$style]); ?>
+                                        </span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php echo CHtml::submitButton('Save', array('class' => 'x2-button', 'style' => 'margin-top: 10px;')); ?>
+                        <?php $this->endWidget(); ?>
+                        <div class="text-muted" style="margin-top: 4px;">
+                            The saved choice is what shows here going forward. All three are generated
+                            at high error-correction level, so the logo doesn't affect scannability.
+                        </div>
                     </dd>
 
                     <dt>Status:</dt>
@@ -192,6 +218,15 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
         embedInput.addEventListener('focus', function () { this.select(); });
     }
 
+    document.querySelectorAll('.qr-style-option input[type="radio"]').forEach(function (radio) {
+        radio.addEventListener('change', function () {
+            document.querySelectorAll('.qr-style-option').forEach(function (opt) {
+                opt.classList.remove('is-selected');
+            });
+            radio.closest('.qr-style-option').classList.add('is-selected');
+        });
+    });
+
     var deleteUrl = <?php echo CJSON::encode($deleteWebFormUrl); ?>;
     var listUrl = <?php echo CJSON::encode($this->createUrl('webFormNotify')); ?>;
     document.querySelectorAll('.webform-delete-btn').forEach(function (btn) {
@@ -221,6 +256,34 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
 </script>
 
 <style>
+    .qr-style-options {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .qr-style-option {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        border: 2px solid #e4e7ec;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: normal;
+    }
+    .qr-style-option.is-selected {
+        border-color: #2f6feb;
+        background-color: #eaf0fe;
+    }
+    .qr-style-option img {
+        width: 130px;
+        height: 130px;
+    }
+    .qr-style-option span {
+        font-size: 12px;
+        white-space: nowrap;
+    }
     /* dt/dd are block-level by default — without this, "label: value" pairs
        just stack vertically instead of sitting on one line. (Same
        Bootstrap-derived dl-horizontal recipe as whatsappGroups/view.php.) */
