@@ -151,7 +151,11 @@ x2.WebFormDesigner = (function() {
                 { name: 'c_campaign_name', type: 'hidden' },
                 { name: 'c_campaign_state', type: 'hidden' },
                 { name: 'c_campaign_city', type: 'hidden' },
-                { name: 'c_program_date', type: 'hidden' }
+                // Sample value shown pre-filled (not just a placeholder) so
+                // the admin sees a working date format and can edit it in
+                // place, rather than guessing what format the parser
+                // (PHP strtotime(), quite permissive) accepts.
+                { name: 'c_program_date', type: 'hidden', value: '22 August 2020' }
             ];
 
             $('#sortable2 li').each(function() {
@@ -167,6 +171,9 @@ x2.WebFormDesigner = (function() {
                 f.find('.field-value-label').html(
                     def.type === 'hidden' ? that.translations['Value:'] : that.translations['Label:']
                 );
+                if (def.value) {
+                    f.find('input[type="text"]').val(def.value);
+                }
             });
 
             // Clear Code mirror stuff

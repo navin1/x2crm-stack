@@ -100,6 +100,15 @@ class WebFormDesigner extends X2Widget {
      */
     public $hiddenByDefault = array();
 
+    /**
+     * fieldName => sample value shown pre-filled (not just a placeholder)
+     * in that field's "Value:"/"Label:" box by default — lets an admin see
+     * a working example (e.g. a correctly-formatted sample date) and edit
+     * it in place, rather than guessing the expected format from scratch.
+     * @var array
+     */
+    public $defaultValues = array();
+
     public $excludeList = array();
     
 
@@ -218,7 +227,7 @@ class WebFormDesigner extends X2Widget {
     /*
     Inserts a single custom field element into the DOM
     */
-    public function displayCustomField ($field, $type, $item, $editable=false, $defaultFieldType='normal') {
+    public function displayCustomField ($field, $type, $item, $editable=false, $defaultFieldType='normal', $defaultValue='') {
         echo '<li class="um-state-default" name="'.$field->fieldName.'">';
         echo "<label class=\"$type\">".
             Yii::t('services',$field->attributeLabel)."</label>";
@@ -268,7 +277,7 @@ class WebFormDesigner extends X2Widget {
             )
         );
         echo CHtml::textField(
-            $field->fieldName . '_label', '',
+            $field->fieldName . '_label', $defaultValue,
             array('style'=>'width: 100px; padding: 0; margin: 0;')
         );
         echo CHtml::label(
@@ -346,7 +355,8 @@ class WebFormDesigner extends X2Widget {
                         $type = 'varcharIcon';
                 }
                 $defaultFieldType = in_array($field->fieldName, $this->hiddenByDefault) ? 'hidden' : 'normal';
-                $this->displayCustomField ($field, $type, $item, $editable, $defaultFieldType);
+                $defaultValue = isset($this->defaultValues[$field->fieldName]) ? $this->defaultValues[$field->fieldName] : '';
+                $this->displayCustomField ($field, $type, $item, $editable, $defaultFieldType, $defaultValue);
             }
         }
     }

@@ -75,6 +75,15 @@ class WebLeadFormDesigner extends WebFormDesigner {
         'c_program_date',
     );
 
+    // Program Date's "Value:" box starts pre-filled with a working sample
+    // date (PHP's strtotime(), used to parse this field, is permissive
+    // about format — this is just to show admins a format that's known to
+    // work) instead of empty, so they can see it and edit it in place
+    // rather than guess.
+    public $defaultValues = array (
+        'c_program_date' => '22 August 2020',
+    );
+
     public $excludeList = array (
         'account',
         'assignedTo',
