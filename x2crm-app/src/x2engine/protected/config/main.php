@@ -255,7 +255,13 @@ $config = array(
             'emulatePrepare' => true,
             'username' => $user,
             'password' => $pass,
-            'charset' => 'utf8',
+            // Every text-bearing column in this schema is utf8mb4 (confirmed:
+            // all 799 of them) — the connection itself was still negotiating
+            // legacy 3-byte utf8, which silently truncates nothing but
+            // outright rejects any 4-byte character (emoji, some CJK/
+            // symbol code points) with a "1366 Incorrect string value" error
+            // on insert, regardless of the target column's own charset.
+            'charset' => 'utf8mb4',
             'enableProfiling' => YII_DEBUG,
             'enableParamLogging' => YII_DEBUG,
             'schemaCachingDuration' => 84600
