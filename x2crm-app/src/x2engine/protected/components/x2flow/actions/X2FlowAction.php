@@ -51,7 +51,7 @@ abstract class X2FlowAction extends X2FlowItem {
      * Action arrays
      */
     private static $anyModelActions = array(
-        "Remote API Call", "Create Action", "Send SMS", "Wait", "Push Web Content",
+        "Remote API Call", "Create Action", "Send SMS", "Send WhatsApp Group Message", "Wait", "Push Web Content",
         "Post to Activity Feed", "Create Notification", "Email", "Complete Process Stage", 
         "Revert Process Stage", "Start Process Stage", "Email Report", "Terminate Process",
         

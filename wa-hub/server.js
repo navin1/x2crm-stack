@@ -828,6 +828,26 @@ async function removeMemberFromGroup(groupId, phone) {
   }
 }
 
+// Posts arbitrary caller-supplied text into a group on demand — distinct
+// from notifyGroupsOfNewLead(), whose text is always rendered server-side
+// from wa_lead_notify_template. Used by the "Send WhatsApp Group Message"
+// X2Flow action (X2FlowWhatsAppGroupMessage.php) so workflows can post a
+// scheduled/triggered message, and by the equivalent admin endpoint below.
+async function sendGroupMessage(groupId, text) {
+  if (!sock || !isOpen) {
+    throw new Error('WhatsApp not connected');
+  }
+  try {
+    await sock.sendMessage(groupId, { text });
+    await logAdminAction({ action: 'send_group_message', params: { groupId }, success: true });
+    return { success: true };
+  } catch (err) {
+    console.error('wa-hub: failed to send group message:', err.message || err);
+    await logAdminAction({ action: 'send_group_message', params: { groupId }, success: false, error: err.message });
+    throw err;
+  }
+}
+
 async function renameGroup(groupId, newName) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
@@ -1660,6 +1680,22 @@ app.post('/admin/groups/:groupId/rename', requireAdmin, adminLimiter, async (req
 
   try {
     const result = await renameGroup(req.params.groupId, groupName);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /admin/groups/:groupId/send - Post an arbitrary text message into
+// this group on demand (e.g. from an X2Flow workflow). Distinct from
+// notify-new-lead/notify-new-form, which always render from the saved
+// lead-notify template rather than accepting caller-supplied text.
+app.post('/admin/groups/:groupId/send', requireAdmin, adminLimiter, async (req, res) => {
+  const { text } = req.body || {};
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
+
+  try {
+    const result = await sendGroupMessage(req.params.groupId, String(text));
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
