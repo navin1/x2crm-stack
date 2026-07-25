@@ -238,6 +238,30 @@ async function filterWhatsAppRegistered(phoneNumbers) {
 // account's own number ("message yourself") — safe from the usual
 // unsolicited-automated-messaging ban risk, since it's not contacting a
 // third party at all.
+// Baileys (via its own bundled jimp fallback, since this stack has no
+// sharp) auto-generates a small JPEG preview thumbnail for every image
+// message by discarding the alpha channel outright rather than flattening
+// it onto a background first (see extractImageThumb() in
+// @whiskeysockets/baileys/lib/Utils/messages-media.js). Many PNGs store
+// an arbitrary (often black, 0x000000) RGB value underneath fully
+// transparent pixels as a compression artifact — invisible as long as
+// alpha is respected, but revealed as solid black the moment alpha is
+// simply dropped. Flattening onto white ourselves first (using the same
+// jimp already in this codebase for QR logo compositing) removes the
+// transparency before Baileys ever sees it, so there's nothing left for
+// that code path to render wrong.
+async function flattenImageToWhite(buffer) {
+  try {
+    const img = await Jimp.read(buffer);
+    const background = new Jimp({ width: img.bitmap.width, height: img.bitmap.height, color: 0xffffffff });
+    background.composite(img, 0, 0);
+    return await background.getBuffer('image/jpeg');
+  } catch (e) {
+    console.warn('wa-hub: failed to flatten image transparency, sending original buffer:', e.message || e);
+    return buffer;
+  }
+}
+
 async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption } = {}) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
@@ -249,7 +273,8 @@ async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption } 
   const jid = `${cleaned}@s.whatsapp.net`;
 
   if (imageBuffer) {
-    await sock.sendMessage(jid, { image: imageBuffer, caption: imageCaption || text || '' });
+    const flattened = await flattenImageToWhite(imageBuffer);
+    await sock.sendMessage(jid, { image: flattened, caption: imageCaption || text || '' });
   } else {
     await sock.sendMessage(jid, { text: text || '' });
   }
