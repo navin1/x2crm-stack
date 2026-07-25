@@ -129,16 +129,45 @@ x2.WebFormDesigner = (function() {
             });
             
 
-            // Reset Field Container
-            // Weblead-only default hidden fields (campaign/program
-            // tracking) are kept here too, alongside the other defaults —
-            // harmless no-op for form types (weblist/service) that don't
-            // have these fields in #sortable2 to begin with.
-            $('#sortable2 li')
-            .not('[name=firstName], [name=lastName]')
-            .not('[name=backgroundInfo], [name=email]')
-            .not('[name=c_campaign_name], [name=c_campaign_state], [name=c_campaign_city], [name=c_program_date]')
-            .prependTo($('#sortable1'));
+            // Reset Field Container: explicitly rebuild #sortable2 from a
+            // known default list (same "clear, then move each one over"
+            // pattern _updateCustomFields() uses for a saved form's own
+            // fields), rather than trying to keep whatever already
+            // happened to be sitting in #sortable2. Whatever was there
+            // reflects the PREVIOUSLY selected saved form (_updateFields
+            // -> _updateCustomFields fully rebuilds #sortable2 per
+            // selection) — not necessarily anything close to these
+            // defaults, so a "keep a few, move the rest out" reset here
+            // could silently end up keeping nothing at all.
+            var defaultFields = [
+                { name: 'firstName', type: 'normal' },
+                { name: 'lastName', type: 'normal' },
+                { name: 'email', type: 'normal' },
+                { name: 'phone', type: 'normal' },
+                { name: 'backgroundInfo', type: 'normal' },
+                // Weblead-only (campaign/program tracking) — harmless
+                // no-op for other form types, since #sortable1 simply
+                // won't have an <li> with that name to move.
+                { name: 'c_campaign_name', type: 'hidden' },
+                { name: 'c_campaign_state', type: 'hidden' },
+                { name: 'c_campaign_city', type: 'hidden' },
+                { name: 'c_program_date', type: 'hidden' }
+            ];
+
+            $('#sortable2 li').each(function() {
+                $(this).prependTo('#sortable1');
+                $(this).find('div').css('display', 'none');
+            });
+
+            $.each(defaultFields, function(i, def) {
+                var f = $('#sortable1 li[name="' + def.name + '"]');
+                if (f.length === 0) return;
+                f.appendTo('#sortable2');
+                f.find('.field-type').val(def.type);
+                f.find('.field-value-label').html(
+                    def.type === 'hidden' ? that.translations['Value:'] : that.translations['Label:']
+                );
+            });
 
             // Clear Code mirror stuff
             for (var i in that.codemirror) {
