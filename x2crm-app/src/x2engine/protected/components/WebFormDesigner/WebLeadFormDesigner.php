@@ -61,19 +61,18 @@ class WebLeadFormDesigner extends WebFormDesigner {
         'c_campaign_state',
         'c_campaign_city',
         'c_program_date',
-        'c_campaign_date',
     );
 
-    // Campaign Date's value is always set server-side to the actual
-    // submission date regardless of what's configured here (see
-    // WebFormAction::handleWebleadFormSubmission) — included in the
-    // designer anyway so it's visible as part of the default field set.
+    // c_campaign_date is deliberately NOT included here — its value is
+    // always set server-side to the actual submission date regardless of
+    // form config (see WebFormAction::handleWebleadFormSubmission), so
+    // there's nothing for an admin to configure and no reason to clutter
+    // the designer's default "Form" field list with it.
     public $hiddenByDefault = array (
         'c_campaign_name',
         'c_campaign_state',
         'c_campaign_city',
         'c_program_date',
-        'c_campaign_date',
     );
 
     public $excludeList = array (

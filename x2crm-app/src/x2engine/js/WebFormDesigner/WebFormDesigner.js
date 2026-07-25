@@ -137,7 +137,7 @@ x2.WebFormDesigner = (function() {
             $('#sortable2 li')
             .not('[name=firstName], [name=lastName]')
             .not('[name=backgroundInfo], [name=email]')
-            .not('[name=c_campaign_name], [name=c_campaign_state], [name=c_campaign_city], [name=c_program_date], [name=c_campaign_date]')
+            .not('[name=c_campaign_name], [name=c_campaign_state], [name=c_campaign_city], [name=c_program_date]')
             .prependTo($('#sortable1'));
 
             // Clear Code mirror stuff
