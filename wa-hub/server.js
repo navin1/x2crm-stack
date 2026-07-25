@@ -171,6 +171,65 @@ function excludeOwnPhone(phoneNumbers) {
   return own ? phoneNumbers.filter(p => String(p).replace(/\D/g, '') !== own) : phoneNumbers;
 }
 
+// Calling codes for the country values actually seen in this install's
+// data — same table as WhatsappGroupsController::countryCallingCode() on
+// the PHP side (kept in sync manually; there's no shared config between
+// the two services). Anything not listed here returns null and is
+// skipped rather than guessed.
+const COUNTRY_CALLING_CODES = {
+  usa: '1', us: '1', 'usa-in': '1',
+  'united states': '1', 'united states of america': '1', unitedstates: '1',
+  canada: '1', 'canada-in': '1',
+  india: '91',
+  russia: '7',
+  mexico: '52',
+  australia: '61',
+  malaysia: '60',
+  nepal: '977',
+  'united arab emirates': '971',
+  suriname: '597',
+};
+
+// Normalizes a Contact's phone into the full international format
+// WhatsApp needs (country code + number, no leading zero/plus). Mirrors
+// WhatsappGroupsController::toWhatsAppPhone() on the PHP side — only
+// touches numbers that are EXACTLY 10 digits (the confirmed "missing
+// country code" shape), leaves anything longer alone, and returns null
+// (skip, don't guess) when the country field isn't one this maps
+// confidently. Needed here too since wa-hub's own lead-notification
+// pollers (pollForNewProspects/pollForNewWebFormLeads) read
+// x2_contacts.phone directly rather than going through the PHP controller.
+function toWhatsAppPhone(rawPhone, country) {
+  const digits = String(rawPhone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.length !== 10) return digits;
+  const callingCode = COUNTRY_CALLING_CODES[String(country || '').trim().toLowerCase()];
+  return callingCode ? (callingCode + digits) : null;
+}
+
+// Baileys' onWhatsApp() checks whether phone numbers actually have a
+// WhatsApp account before we try to message/add them — used so a contact
+// with a landline or mistyped number is silently skipped instead of
+// making groupParticipantsUpdate/sendMessage fail (or worse, appear to
+// succeed while adding a dead entry). Fails open (returns the input
+// unfiltered) if the check itself errors, so a transient WhatsApp API
+// hiccup doesn't block adds entirely.
+async function filterWhatsAppRegistered(phoneNumbers) {
+  if (!sock || phoneNumbers.length === 0) return phoneNumbers;
+  try {
+    const results = await sock.onWhatsApp(...phoneNumbers.map(p => String(p).replace(/\D/g, '')));
+    const registered = new Set(
+      (results || [])
+        .filter(r => r && r.exists)
+        .map(r => String(r.jid).replace('@s.whatsapp.net', '').replace(/\D/g, ''))
+    );
+    return phoneNumbers.filter(p => registered.has(String(p).replace(/\D/g, '')));
+  } catch (e) {
+    console.warn('wa-hub: onWhatsApp check failed, proceeding without pre-filtering:', e.message || e);
+    return phoneNumbers;
+  }
+}
+
 // Sends a WhatsApp text message, optionally with an attached image, to a
 // given phone number. Passing null/omitted `toPhone` sends to the linked
 // account's own number ("message yourself") — safe from the usual
@@ -488,14 +547,29 @@ async function pollForNewProspects() {
       // "Pracharak" Contact List, not a dedicated table (see
       // WhatsappGroupsController::getPracharakContacts).
       const [prRows] = await dbPool.execute(
-        'SELECT firstName, lastName, phone FROM x2_contacts WHERE id = ? AND phone IS NOT NULL AND phone <> \'\'',
+        'SELECT firstName, lastName, phone, country FROM x2_contacts WHERE id = ? AND phone IS NOT NULL AND phone <> \'\'',
         [form.pracharakId]
       );
       const pr = prRows[0];
       if (!pr) continue; // contact gone, removed from the list, or has no phone — nothing to notify
 
+      // Most contacts store a bare 10-digit local number with no country
+      // code — see toWhatsAppPhone(). Skip (don't guess) rather than send
+      // to a malformed number if the country isn't one we recognize.
+      const pracharakPhone = toWhatsAppPhone(pr.phone, pr.country);
+      if (!pracharakPhone) continue;
+
+      // A correctly-formatted number can still have no WhatsApp account
+      // behind it (test/placeholder contacts, typos) — skip cleanly rather
+      // than let sendWhatsAppMessage fail and break the loop below every
+      // poll cycle, which previously got a lead permanently stuck retrying
+      // (and spamming wa_admin_audit) for as long as that pracharak's
+      // number stayed unreachable.
+      const [registered] = await filterWhatsAppRegistered([pracharakPhone]);
+      if (!registered) continue;
+
       const watermark = await notifyNewLeadsSince({
-        leadSource, phone: pr.phone, pracharakName: [pr.firstName, pr.lastName].filter(Boolean).join(' ') || null,
+        leadSource, phone: pracharakPhone, pracharakName: [pr.firstName, pr.lastName].filter(Boolean).join(' ') || null,
         formLabel: form.name, since, logParams: { formId: form.id },
       });
 
@@ -523,7 +597,7 @@ async function pollForNewWebFormLeads() {
   if (!sock || !isOpen) return;
   try {
     const [rows] = await dbPool.execute(
-      `SELECT n.webFormId, n.lastPolledAt, f.name AS formName, f.leadSource, c.phone, c.firstName, c.lastName
+      `SELECT n.webFormId, n.lastPolledAt, f.name AS formName, f.leadSource, c.phone, c.country, c.firstName, c.lastName
        FROM wa_webform_notify n
        JOIN x2_web_forms f ON f.id = n.webFormId
        JOIN x2_contacts c ON c.id = n.pracharakId
@@ -532,8 +606,19 @@ async function pollForNewWebFormLeads() {
 
     for (const row of rows) {
       const since = row.lastPolledAt || 0;
+
+      // Same "bare 10-digit local number" normalization as
+      // pollForNewProspects() above — skip rather than guess.
+      const pracharakPhone = toWhatsAppPhone(row.phone, row.country);
+      if (!pracharakPhone) continue;
+
+      // See the matching check in pollForNewProspects() above — a
+      // correctly-formatted number can still have no WhatsApp account.
+      const [registered] = await filterWhatsAppRegistered([pracharakPhone]);
+      if (!registered) continue;
+
       const watermark = await notifyNewLeadsSince({
-        leadSource: row.leadSource, phone: row.phone, pracharakName: [row.firstName, row.lastName].filter(Boolean).join(' ') || null,
+        leadSource: row.leadSource, phone: pracharakPhone, pracharakName: [row.firstName, row.lastName].filter(Boolean).join(' ') || null,
         formLabel: row.formName, since, logParams: { webFormId: row.webFormId },
       });
 
@@ -552,6 +637,9 @@ async function createWhatsAppGroup(groupName, participants = [], listId = null) 
   }
   try {
     participants = excludeOwnPhone(participants);
+    // Silently drop numbers with no WhatsApp account instead of letting
+    // them break/pollute the new group — see filterWhatsAppRegistered().
+    participants = await filterWhatsAppRegistered(participants);
 
     // participants: phone numbers like "1234567890@s.whatsapp.net"
     const participantIds = participants.map(p => {
@@ -660,15 +748,28 @@ async function addMembersToGroup(groupId, phoneNumbers = []) {
   }
   try {
     phoneNumbers = excludeOwnPhone(phoneNumbers);
-    const participantIds = phoneNumbers.map(p => {
+    // Silently drop numbers with no WhatsApp account rather than let one
+    // bad number fail/pollute the whole add — see filterWhatsAppRegistered().
+    const registeredPhones = await filterWhatsAppRegistered(phoneNumbers);
+    const skipped = phoneNumbers.length - registeredPhones.length;
+    if (skipped > 0) {
+      console.warn(`wa-hub: skipping ${skipped} number(s) not registered on WhatsApp when adding to group ${groupId}`);
+    }
+
+    if (registeredPhones.length === 0) {
+      await logAdminAction({ action: 'add_group_members', params: { groupId, memberCount: 0, skipped }, success: true });
+      return { success: true, added: 0, skipped };
+    }
+
+    const participantIds = registeredPhones.map(p => {
       const cleaned = String(p).replace(/\D/g, '');
       return `${cleaned}@s.whatsapp.net`;
     });
-    
+
     await sock.groupParticipantsUpdate(groupId, participantIds, 'add');
-    
+
     // Store in database
-    for (const phone of phoneNumbers) {
+    for (const phone of registeredPhones) {
       const cleaned = String(phone).replace(/\D/g, '');
       try {
         const [result] = await dbPool.execute(
@@ -679,9 +780,9 @@ async function addMembersToGroup(groupId, phoneNumbers = []) {
         // Ignore duplicate key errors
       }
     }
-    
-    await logAdminAction({ action: 'add_group_members', params: { groupId, memberCount: phoneNumbers.length }, success: true });
-    return { success: true, added: phoneNumbers.length };
+
+    await logAdminAction({ action: 'add_group_members', params: { groupId, memberCount: registeredPhones.length, skipped }, success: true });
+    return { success: true, added: registeredPhones.length, skipped };
   } catch (err) {
     console.error('wa-hub: failed to add members:', err.message || err);
     await logAdminAction({ action: 'add_group_members', params: { groupId }, success: false, error: err.message });
