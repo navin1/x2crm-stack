@@ -32,7 +32,7 @@
 
                 <div class="form-group">
                     <label for="webform-picker">Editing message for:</label>
-                    <select id="webform-picker" class="form-control" style="max-width: 400px;">
+                    <select id="webform-picker" class="x2-select">
                         <option value="">&mdash; Default (all forms without a custom message) &mdash;</option>
                         <?php foreach ($forms as $f): ?>
                             <option value="<?php echo (int) $f['id']; ?>"
@@ -41,6 +41,7 @@
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <br>
                 </div>
 
                 <?php if ($selectedWebFormId): ?>
