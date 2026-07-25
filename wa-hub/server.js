@@ -377,17 +377,26 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
   );
 
   for (const lead of leads) {
-    const bodyLines = [];
     const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-    if (fullName) bodyLines.push(`Name: ${fullName}`);
-    if (lead.email) bodyLines.push(`Email: ${lead.email}`);
-    if (lead.phone) bodyLines.push(`Phone: ${lead.phone}`);
-    if (lead.company) bodyLines.push(`Company: ${lead.company}`);
-    if (lead.title) bodyLines.push(`Title: ${lead.title}`);
-    if (lead.backgroundInfo) bodyLines.push(`Message: ${lead.backgroundInfo}`);
+
+    // Both the pracharak's own DM and the group broadcast render from the
+    // exact same admin-editable template (WhatsApp Groups > Edit New-Lead
+    // Message) — a single wording, not two separate formats to maintain.
+    const text = await renderLeadNotifyTemplate({
+      formLabel,
+      pracharak: pracharakName || '',
+      name: fullName,
+      email: lead.email || '',
+      phone: lead.phone || '',
+      company: lead.company || '',
+      title: lead.title || '',
+      message: lead.backgroundInfo || '',
+      state: lead.state || '',
+      city: lead.city || '',
+    }, leadSource);
 
     try {
-      await sendWhatsAppMessage(phone, { text: [`New prospect from "${formLabel}":`, '', ...bodyLines].join('\n') });
+      await sendWhatsAppMessage(phone, { text });
       await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: true });
       watermark = lead.createDate;
     } catch (e) {
@@ -400,24 +409,9 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
     // lead broadcasts — deliberately isolated in its own try/catch so a
     // failure here (e.g. the bot got removed from the group) never blocks
     // or retries the lead itself; the pracharak DM above is the primary,
-    // required notification and already advanced the watermark. Unlike the
-    // DM text above, this one goes through the user-editable template
-    // (renderLeadNotifyTemplate) since this is the copy the user asked to
-    // be able to customize the wording/format of.
+    // required notification and already advanced the watermark.
     try {
-      const groupText = await renderLeadNotifyTemplate({
-        formLabel,
-        pracharak: pracharakName || '',
-        name: fullName,
-        email: lead.email || '',
-        phone: lead.phone || '',
-        company: lead.company || '',
-        title: lead.title || '',
-        message: lead.backgroundInfo || '',
-        state: lead.state || '',
-        city: lead.city || '',
-      }, leadSource);
-      await notifyGroupsOfNewLead({ text: groupText, leadSource });
+      await notifyGroupsOfNewLead({ text, leadSource });
     } catch (e) {
       console.warn('wa-hub: group new-lead broadcast failed:', e.message || e);
     }
@@ -426,23 +420,20 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
   return watermark;
 }
 
-// Default wording for the group broadcast, seeded into
-// wa_lead_notify_template on first run — same fields as the pracharak DM
-// above, just user-editable from here on (WhatsApp Groups > Edit New-Lead
-// Message in X2CRM). Each "Label: {{placeholder}}" line is dropped
-// entirely by renderLeadNotifyTemplate when that placeholder is empty, so
-// optional fields don't show up as blank lines.
+// Default wording for both the pracharak's own DM and the group
+// broadcast (identical template, see notifyNewLeadsSince), seeded into
+// wa_lead_notify_template on first run and user-editable from there on
+// (WhatsApp Groups > Edit New-Lead Message in X2CRM). Each
+// "Label: {{placeholder}}" line is dropped entirely by
+// renderLeadNotifyTemplate when that placeholder is empty, so optional
+// fields don't show up as blank lines.
 const DEFAULT_LEAD_NOTIFY_TEMPLATE = [
-  'New lead from "{{formLabel}}":',
-  'Assigned to: {{pracharak}}',
-  '',
+  'Jai Sadgurudeo {{pracharak}} Ji,',
+  'A new lead created for you using "{{formLabel}}": ',
   'Name: {{name}}',
   'Email: {{email}}',
   'Phone: {{phone}}',
-  'Company: {{company}}',
-  'Title: {{title}}',
   'State: {{state}}',
-  'City: {{city}}',
   'Message: {{message}}',
 ].join('\n');
 

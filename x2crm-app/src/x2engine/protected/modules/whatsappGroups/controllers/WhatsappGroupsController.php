@@ -408,13 +408,12 @@ class WhatsappGroupsController extends x2base {
     }
 
     /**
-     * Toggle whether a group receives the "new lead created" broadcast
-     * (a courtesy copy of the same pracharak-assignment notification,
-     * posted into the group instead of/in addition to the personal DM).
-     * The message always originates from wa-hub's single paired WhatsApp
-     * number — there's no separate sender identity to configure — the
-     * only real prerequisite is that account already being a member of
-     * this group.
+     * Toggle whether a group receives the "new lead created" broadcast —
+     * the exact same message (same template) as the pracharak's own DM,
+     * posted into the group in addition to it. The message always
+     * originates from wa-hub's single paired WhatsApp number — there's no
+     * separate sender identity to configure — the only real prerequisite
+     * is that account already being a member of this group.
      */
     public function actionToggleNotifyNewLead() {
         if (!Yii::app()->request->isPostRequest) {
@@ -466,10 +465,10 @@ class WhatsappGroupsController extends x2base {
     }
 
     /**
-     * Admin-only editor for the new-lead WhatsApp group broadcast's wording
-     * (see wa-hub's renderLeadNotifyTemplate()). Does not affect the
-     * personal DM the assigned pracharak already gets — only the courtesy
-     * copy posted into whichever group(s) have notifications toggled on.
+     * Admin-only editor for the new-lead notification wording (see
+     * wa-hub's renderLeadNotifyTemplate()) — the same template is used
+     * both for the assigned pracharak's own DM and the courtesy copy
+     * posted into whichever group(s) have notifications toggled on.
      */
     public function actionEditNotifyTemplate($webFormId = null) {
         if (!Yii::app()->params->isAdmin) {

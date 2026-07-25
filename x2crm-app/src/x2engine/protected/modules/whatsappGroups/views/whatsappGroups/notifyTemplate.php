@@ -25,9 +25,9 @@
             <div class="panel-heading">Message template</div>
             <div class="panel-body">
                 <p class="text-muted">
-                    This is the wording posted into any WhatsApp group with new-lead
-                    notifications turned on. It does not change the personal message the
-                    assigned pracharak already gets.
+                    This is the wording sent to the assigned pracharak's own WhatsApp DM,
+                    and also posted into any WhatsApp group with new-lead notifications
+                    turned on — the same message, sent both ways.
                 </p>
 
                 <div class="form-group">
