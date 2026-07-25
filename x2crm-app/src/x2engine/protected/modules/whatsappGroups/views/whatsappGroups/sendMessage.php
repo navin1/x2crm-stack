@@ -22,7 +22,7 @@
         <?php endif; ?>
 
         <div class="send-message-columns">
-        <div class="panel panel-default send-message-left">
+        <div class="panel panel-default send-message-individual">
             <div class="panel-heading">Send to an Individual</div>
             <div class="panel-body">
                 <?php $form = $this->beginWidget('CActiveForm', array(
@@ -64,7 +64,7 @@
             </div>
         </div>
 
-        <div class="panel panel-default send-message-right">
+        <div class="panel panel-default send-message-group">
             <div class="panel-heading">Send to a WhatsApp Group</div>
             <div class="panel-body">
                 <?php $groupForm = $this->beginWidget('CActiveForm', array(
@@ -103,9 +103,8 @@
                 <?php $this->endWidget(); ?>
             </div>
         </div>
-        </div>
 
-        <div class="panel panel-default">
+        <div class="panel panel-default send-message-broadcast">
             <div class="panel-heading">Broadcast to a Contact List</div>
             <div class="panel-body">
                 <p class="text-muted">
@@ -160,8 +159,9 @@
                 <?php $this->endWidget(); ?>
             </div>
         </div>
+        </div>
 
-        <div style="margin-top: 20px;">
+        <div class="send-message-footer">
             <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
         </div>
     </div>
@@ -247,9 +247,26 @@
 </script>
 
 <style>
-    .panel { border: 1px solid #ddd; margin-bottom: 20px; }
-    .panel-heading { background-color: #f5f5f5; padding: 15px; border-bottom: 1px solid #ddd; font-weight: bold; }
-    .panel-body { padding: 15px; }
+    #x2-layout-content { padding: 0 20px; }
+
+    .panel {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+    .panel-heading {
+        padding: 14px 18px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 0.2px;
+        color: #fff;
+    }
+    .panel-body {
+        padding: 18px;
+    }
     .form-group { margin-bottom: 16px; }
     .form-group label { display: block; margin-bottom: 6px; font-weight: 600; }
     .form-control { display: block; width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
@@ -257,11 +274,58 @@
     .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .text-muted { color: #6c757d; }
-    #x2-layout-content { padding: 0 20px; }
-    .send-message-columns { display: flex; gap: 20px; align-items: stretch; }
-    .send-message-left, .send-message-right { flex: 1 1 0; max-width: 500px; }
-    @media (max-width: 1050px) {
+
+    /* Three equal-width cards on wide screens, each a flex column so its
+       Send button consistently sinks to the bottom regardless of how much
+       intro text/fields the other cards have — a uniform "row of cards"
+       look instead of ragged bottoms. */
+    .send-message-columns { display: flex; align-items: stretch; gap: 20px; margin-bottom: 4px; }
+    .send-message-individual, .send-message-group, .send-message-broadcast {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 0;
+    }
+    .send-message-individual .panel-body,
+    .send-message-group .panel-body,
+    .send-message-broadcast .panel-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+    }
+    .send-message-individual .panel-body form,
+    .send-message-group .panel-body form,
+    .send-message-broadcast .panel-body form {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+    }
+    /* Pins the Send button to the bottom of each card without stretching
+       the fields/textarea above it. */
+    .send-message-individual .x2-button,
+    .send-message-group .x2-button,
+    .send-message-broadcast .x2-button {
+        margin-top: auto;
+        align-self: flex-start;
+    }
+
+    .send-message-individual .panel-heading { background-color: #2f6feb; }
+    .send-message-group .panel-heading { background-color: #28a745; }
+    .send-message-broadcast .panel-heading { background-color: #e8830f; }
+
+    .send-message-footer { margin-top: 4px; }
+
+    @media (max-width: 1100px) {
         .send-message-columns { flex-direction: column; }
-        .send-message-left, .send-message-right { max-width: 600px; width: 100%; }
+        .send-message-individual, .send-message-group, .send-message-broadcast {
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+        .send-message-individual .x2-button,
+        .send-message-group .x2-button,
+        .send-message-broadcast .x2-button {
+            margin-top: 16px;
+        }
     }
 </style>
