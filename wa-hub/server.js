@@ -368,10 +368,22 @@ async function notifyAdminNewForm({ name, url }) {
 // actually (successfully) notified — a send failure stops the loop without
 // moving the watermark, so the failed lead gets retried next poll instead of
 // silently skipped.
+// x2_x2leads' c_campaign_date/c_program_date are X2CRM "date" custom
+// fields — stored as Unix epoch seconds (bigint), same convention as
+// createDate/deactivateAt elsewhere in this codebase. Rendered here rather
+// than left as a raw epoch number in the WhatsApp message.
+function formatEpochDate(seconds) {
+  if (!seconds) return '';
+  const d = new Date(Number(seconds) * 1000);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel, since, logParams = {} }) {
   let watermark = since;
   const [leads] = await dbPool.execute(
-    'SELECT firstName, lastName, email, phone, company, title, backgroundInfo, state, city, createDate ' +
+    'SELECT firstName, lastName, email, phone, company, title, backgroundInfo, state, city, createDate, ' +
+    'c_campaign_name, c_campaign_date, c_program_date, c_campaign_state, c_campaign_city, c_Gender ' +
     'FROM x2_x2leads WHERE leadSource = ? AND createDate > ? ORDER BY createDate ASC',
     [leadSource, since]
   );
@@ -393,6 +405,12 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
       message: lead.backgroundInfo || '',
       state: lead.state || '',
       city: lead.city || '',
+      campaignName: lead.c_campaign_name || '',
+      campaignDate: formatEpochDate(lead.c_campaign_date),
+      programDate: formatEpochDate(lead.c_program_date),
+      campaignState: lead.c_campaign_state || '',
+      campaignCity: lead.c_campaign_city || '',
+      gender: lead.c_Gender || '',
     }, leadSource);
 
     // A form can be configured for group-only targeting with no pracharak

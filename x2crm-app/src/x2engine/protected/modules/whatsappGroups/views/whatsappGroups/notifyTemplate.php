@@ -87,6 +87,12 @@
                     <li><code>{{state}}</code></li>
                     <li><code>{{city}}</code></li>
                     <li><code>{{message}}</code> &mdash; the lead's own message/background info field</li>
+                    <li><code>{{campaignName}}</code></li>
+                    <li><code>{{campaignDate}}</code></li>
+                    <li><code>{{programDate}}</code></li>
+                    <li><code>{{campaignState}}</code></li>
+                    <li><code>{{campaignCity}}</code></li>
+                    <li><code>{{gender}}</code></li>
                 </ul>
 
                 <p>
