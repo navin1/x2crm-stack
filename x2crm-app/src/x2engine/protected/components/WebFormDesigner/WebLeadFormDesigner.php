@@ -76,12 +76,11 @@ class WebLeadFormDesigner extends WebFormDesigner {
     );
 
     // Program Date's "Value:" box starts pre-filled with a working sample
-    // date (PHP's strtotime(), used to parse this field, is permissive
-    // about format — this is just to show admins a format that's known to
-    // work) instead of empty, so they can see it and edit it in place
-    // rather than guess.
+    // date instead of empty, so admins can see it and edit it in place
+    // rather than guess. "Month D, YYYY" matches X2CRM's own native
+    // date-picker format (Formatter::formatDatePicker()).
     public $defaultValues = array (
-        'c_program_date' => '22 August 2020',
+        'c_program_date' => 'August 22, 2020',
     );
 
     public $excludeList = array (

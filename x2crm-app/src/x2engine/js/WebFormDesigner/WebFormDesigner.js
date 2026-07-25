@@ -153,9 +153,11 @@ x2.WebFormDesigner = (function() {
                 { name: 'c_campaign_city', type: 'hidden' },
                 // Sample value shown pre-filled (not just a placeholder) so
                 // the admin sees a working date format and can edit it in
-                // place, rather than guessing what format the parser
-                // (PHP strtotime(), quite permissive) accepts.
-                { name: 'c_program_date', type: 'hidden', value: '22 August 2020' }
+                // place, rather than guessing. "Month D, YYYY" matches
+                // X2CRM's own native date-picker format (Formatter::
+                // formatDatePicker()), not just whatever the parser (PHP
+                // strtotime(), quite permissive) happens to accept.
+                { name: 'c_program_date', type: 'hidden', value: 'August 22, 2020' }
             ];
 
             $('#sortable2 li').each(function() {
