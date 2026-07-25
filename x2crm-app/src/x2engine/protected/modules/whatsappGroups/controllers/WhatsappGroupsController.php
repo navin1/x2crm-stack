@@ -508,10 +508,13 @@ class WhatsappGroupsController extends x2base {
         }
 
         // Which WhatsApp group(s) this form's leads actually reach — read
-        // only, informational. Falls back to the same notifyOnNewLead=1
-        // pool notifyGroupsOfNewLead() itself falls back to.
+        // only, informational. Matches wa-hub's notifyGroupsOfNewLead(): a
+        // group only receives it if BOTH explicitly assigned here
+        // (wa_lead_notify_group_map) AND its own "New-lead notifications"
+        // toggle is on. No more "broadcast to every eligible group"
+        // fallback for forms with no explicit assignment.
         $groupNames = array();
-        $usingFallback = true;
+        $ineligibleGroupNames = array();
         try {
             $allGroups = $this->callWaHub('GET', '/admin/groups');
         } catch (Exception $e) {
@@ -522,21 +525,16 @@ class WhatsappGroupsController extends x2base {
                 ->select('groupId')->from('wa_lead_notify_group_map')
                 ->where('leadSource=:ls', array(':ls' => $leadSource))
                 ->queryColumn();
-            if (!empty($mappedIds)) {
-                $usingFallback = false;
-                $byId = array();
-                foreach ($allGroups as $g) {
-                    $byId[$g['groupId']] = $g['groupName'];
-                }
-                foreach ($mappedIds as $gid) {
-                    $groupNames[] = isset($byId[$gid]) ? $byId[$gid] : $gid;
-                }
-            }
-        }
-        if ($usingFallback) {
+            $byId = array();
             foreach ($allGroups as $g) {
-                if (!empty($g['notifyOnNewLead'])) {
-                    $groupNames[] = $g['groupName'];
+                $byId[$g['groupId']] = $g;
+            }
+            foreach ($mappedIds as $gid) {
+                $name = isset($byId[$gid]) ? $byId[$gid]['groupName'] : $gid;
+                if (isset($byId[$gid]) && !empty($byId[$gid]['notifyOnNewLead'])) {
+                    $groupNames[] = $name;
+                } else {
+                    $ineligibleGroupNames[] = $name;
                 }
             }
         }
@@ -555,7 +553,7 @@ class WhatsappGroupsController extends x2base {
             'selectedWebFormId' => $webFormId,
             'isCustom' => $isCustom,
             'groupNames' => $groupNames,
-            'usingFallback' => $usingFallback,
+            'ineligibleGroupNames' => $ineligibleGroupNames,
             'previewIframeUrl' => $previewIframeUrl,
             'selectedFormName' => $selectedFormName,
         ));
@@ -1130,8 +1128,25 @@ class WhatsappGroupsController extends x2base {
                         ));
                     }
                 } else {
-                    // Pracharak explicitly off but group targeting is on.
-                    Yii::app()->db->createCommand()->delete('wa_webform_notify', 'webFormId=:id', array(':id' => $webFormId));
+                    // Pracharak explicitly off but group targeting is on —
+                    // keep a row (pracharakId NULL) rather than delete it,
+                    // so wa-hub's poller still has a lastPolledAt watermark
+                    // to track for this form's group-only broadcasts.
+                    $exists = Yii::app()->db->createCommand()
+                        ->select('webFormId')->from('wa_webform_notify')
+                        ->where('webFormId=:id', array(':id' => $webFormId))
+                        ->queryScalar();
+                    if ($exists !== false) {
+                        Yii::app()->db->createCommand()->update('wa_webform_notify',
+                            array('pracharakId' => null),
+                            'webFormId=:id', array(':id' => $webFormId));
+                    } else {
+                        Yii::app()->db->createCommand()->insert('wa_webform_notify', array(
+                            'webFormId' => $webFormId,
+                            'pracharakId' => null,
+                            'lastPolledAt' => time(),
+                        ));
+                    }
                 }
 
                 Yii::app()->db->createCommand()->delete('wa_lead_notify_group_map',

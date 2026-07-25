@@ -87,7 +87,7 @@ $deleteWebFormUrl = $this->createUrl('/marketing/marketing/deleteWebForm');
                                         <?php if (!empty($groupNames)): ?>
                                             <?php echo CHtml::encode(implode(', ', $groupNames)); ?>
                                         <?php else: ?>
-                                            <span class="text-muted">default pool</span>
+                                            <span class="text-muted">none assigned</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="actions-cell">

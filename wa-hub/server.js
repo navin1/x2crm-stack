@@ -395,21 +395,28 @@ async function notifyNewLeadsSince({ leadSource, phone, pracharakName, formLabel
       city: lead.city || '',
     }, leadSource);
 
-    try {
-      await sendWhatsAppMessage(phone, { text });
-      await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: true });
-      watermark = lead.createDate;
-    } catch (e) {
-      console.warn(`wa-hub: failed to notify for leadSource ${leadSource}:`, e.message || e);
-      await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: false, error: e.message });
-      break;
+    // A form can be configured for group-only targeting with no pracharak
+    // assigned at all — phone is null in that case, so there's no DM to
+    // send; go straight to the group broadcast below instead of treating
+    // a nonexistent DM as the primary required send.
+    if (phone) {
+      try {
+        await sendWhatsAppMessage(phone, { text });
+        await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: true });
+      } catch (e) {
+        console.warn(`wa-hub: failed to notify for leadSource ${leadSource}:`, e.message || e);
+        await logAdminAction({ action: 'notify_new_prospect', params: { leadSource, ...logParams }, success: false, error: e.message });
+        break;
+      }
     }
+    watermark = lead.createDate;
 
-    // Best-effort courtesy copy into any WhatsApp group(s) flagged for new-
-    // lead broadcasts — deliberately isolated in its own try/catch so a
-    // failure here (e.g. the bot got removed from the group) never blocks
-    // or retries the lead itself; the pracharak DM above is the primary,
-    // required notification and already advanced the watermark.
+    // Best-effort group broadcast — deliberately isolated in its own
+    // try/catch so a failure here (e.g. the bot got removed from the
+    // group) never blocks or retries the lead itself; the watermark has
+    // already advanced above regardless of whether this succeeds.
+    // notifyGroupsOfNewLead() itself decides which (if any) groups
+    // actually receive it.
     try {
       await notifyGroupsOfNewLead({ text, leadSource });
     } catch (e) {
@@ -486,19 +493,22 @@ async function renderLeadNotifyTemplate(fields, leadSource) {
 // it — automatic for groups created via createWhatsAppGroup(), a manual
 // one-time add otherwise.
 async function notifyGroupsOfNewLead({ text, leadSource }) {
-  if (!sock || !isOpen || !dbPool) return;
-  let groups = [];
-  if (leadSource) {
-    const [mapped] = await dbPool.execute(
-      'SELECT groupId FROM wa_lead_notify_group_map WHERE leadSource = ?', [leadSource]
-    );
-    groups = mapped;
-  }
-  if (groups.length === 0) {
-    // No explicit per-form targeting configured for this form — fall back
-    // to the legacy blanket broadcast (unchanged behavior).
-    [groups] = await dbPool.execute('SELECT groupId FROM wa_groups WHERE notifyOnNewLead = 1');
-  }
+  if (!sock || !isOpen || !dbPool || !leadSource) return;
+  // A group only receives a lead's broadcast if it is BOTH eligible
+  // (wa_groups.notifyOnNewLead = 1 — a per-group master switch, set from
+  // that group's own page) AND explicitly assigned to this specific form
+  // (wa_lead_notify_group_map — set on Web Form Notifications in X2CRM).
+  // Neither condition alone is enough: there is no more "broadcast to
+  // every eligible group" fallback for forms with no explicit assignment.
+  // COLLATE needed on the join — wa_groups.groupId defaults to MySQL 8's
+  // utf8mb4_0900_ai_ci while wa_lead_notify_group_map.groupId is pinned to
+  // utf8mb4_general_ci (X2Engine's convention); mixing them errors.
+  const [groups] = await dbPool.execute(
+    `SELECT m.groupId FROM wa_lead_notify_group_map m
+     JOIN wa_groups g ON g.groupId COLLATE utf8mb4_general_ci = m.groupId
+     WHERE m.leadSource = ? AND g.notifyOnNewLead = 1`,
+    [leadSource]
+  );
   for (const g of groups) {
     await sock.sendMessage(g.groupId, { text });
   }
@@ -587,26 +597,38 @@ async function pollForNewWebFormLeads() {
   if (!dbPool) return;
   if (!sock || !isOpen) return;
   try {
+    // LEFT JOIN, not JOIN: a form can be configured for group-only
+    // targeting with no pracharak assigned at all (n.pracharakId NULL) —
+    // that row must still be picked up so its group broadcast runs. The
+    // phone-not-empty check moved into the JOIN condition (not WHERE) so
+    // it only filters which contact row attaches, not whether the form's
+    // own row is selected at all.
     const [rows] = await dbPool.execute(
       `SELECT n.webFormId, n.lastPolledAt, f.name AS formName, f.leadSource, c.phone, c.country, c.firstName, c.lastName
        FROM wa_webform_notify n
        JOIN x2_web_forms f ON f.id = n.webFormId
-       JOIN x2_contacts c ON c.id = n.pracharakId
-       WHERE f.leadSource IS NOT NULL AND f.leadSource <> '' AND c.phone IS NOT NULL AND c.phone <> ''`
+       LEFT JOIN x2_contacts c ON c.id = n.pracharakId AND c.phone IS NOT NULL AND c.phone <> ''
+       WHERE f.leadSource IS NOT NULL AND f.leadSource <> ''`
     );
 
     for (const row of rows) {
       const since = row.lastPolledAt || 0;
 
-      // Same "bare 10-digit local number" normalization as
-      // pollForNewProspects() above — skip rather than guess.
-      const pracharakPhone = toWhatsAppPhone(row.phone, row.country);
-      if (!pracharakPhone) continue;
-
-      // See the matching check in pollForNewProspects() above — a
-      // correctly-formatted number can still have no WhatsApp account.
-      const [registered] = await filterWhatsAppRegistered([pracharakPhone]);
-      if (!registered) continue;
+      // No pracharak assigned (or their contact/phone no longer resolves)
+      // — pracharakPhone stays null and notifyNewLeadsSince() skips the DM
+      // step, doing only the group broadcast for this form.
+      let pracharakPhone = null;
+      if (row.phone) {
+        // Same "bare 10-digit local number" normalization as
+        // pollForNewProspects() above — skip (don't guess) rather than
+        // send to a malformed number if the country isn't recognized.
+        pracharakPhone = toWhatsAppPhone(row.phone, row.country);
+        // A correctly-formatted number can still have no WhatsApp account.
+        if (pracharakPhone) {
+          const [registered] = await filterWhatsAppRegistered([pracharakPhone]);
+          if (!registered) pracharakPhone = null;
+        }
+      }
 
       const watermark = await notifyNewLeadsSince({
         leadSource: row.leadSource, phone: pracharakPhone, pracharakName: [row.firstName, row.lastName].filter(Boolean).join(' ') || null,
@@ -1045,11 +1067,18 @@ async function initDb() {
     await dbPool.execute(`
       CREATE TABLE IF NOT EXISTS wa_webform_notify (
         webFormId INT PRIMARY KEY,
-        pracharakId INT NOT NULL,
+        pracharakId INT NULL,
         lastPolledAt BIGINT NOT NULL DEFAULT 0,
         updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+    // A form can now be configured for group-only targeting with no
+    // pracharak assigned at all (see WhatsappGroupsController::
+    // actionSaveWebFormNotify) — that row's pracharakId is NULL, kept only
+    // to track lastPolledAt for pollForNewWebFormLeads(). Widen existing
+    // installs; MODIFY COLUMN to the same definition is a safe no-op on
+    // repeat runs, unlike ADD COLUMN.
+    await dbPool.execute(`ALTER TABLE wa_webform_notify MODIFY COLUMN pracharakId INT NULL`);
     // Per-form WhatsApp group targeting for the new-lead broadcast — when a
     // leadSource has any rows here, notifyGroupsOfNewLead() sends only to
     // these groups instead of the blanket wa_groups.notifyOnNewLead pool.

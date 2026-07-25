@@ -96,13 +96,14 @@
                                 &nbsp;
                                 <?php echo CHtml::submitButton('Turn on', array('class' => 'x2-button')); ?>
                             <?php endif; ?>
-                            <span class="text-muted" style="margin-left: 8px;">When on, every new lead notification (the same one sent to the assigned pracharak) is also posted into this group, from the WhatsApp number paired to this app. Requires that number to already be a member of this group.</span>
+                            <span class="text-muted" style="margin-left: 8px;">When on, this group becomes eligible to receive new-lead notifications (the same message sent to the assigned pracharak), from the WhatsApp number paired to this app. Requires that number to already be a member of this group.</span>
                         <?php $this->endWidget(); ?>
                         <div class="text-muted" style="margin-top: 4px;">
-                            Note: if a Web Lead Form has this group explicitly selected under
-                            <?php echo CHtml::link('Web Form Notifications', array('webFormNotify')); ?>,
-                            that form's leads reach this group regardless of the toggle above.
-                            This toggle only affects forms with no explicit group selection.
+                            Note: turning this on is not enough by itself &mdash; a Web Lead Form must
+                            also have this group explicitly selected under
+                            <?php echo CHtml::link('Web Form Notifications', array('webFormNotify')); ?>
+                            before its leads actually reach this group. Both this toggle and that
+                            assignment are required.
                         </div>
                     </dd>
 

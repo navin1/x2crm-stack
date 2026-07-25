@@ -197,8 +197,10 @@ $isActive = !empty($form['active']) && !$isScheduledPast;
                                     <?php endforeach; ?>
                                 </select>
                                 <div class="text-muted" style="margin-top: 4px;">
-                                    If none are picked, this form's leads fall back to every group with its own
-                                    "New-lead notifications" toggle on (set from that group's own page).
+                                    A picked group only actually receives this form's leads if its own
+                                    "New-lead notifications" toggle (set from that group's own page) is
+                                    also on. If none are picked here, no group receives anything for this
+                                    form &mdash; picking a pracharak above is independent of this.
                                 </div>
                             </div>
                             <?php echo CHtml::submitButton('Save', array('class' => 'x2-button highlight')); ?>
