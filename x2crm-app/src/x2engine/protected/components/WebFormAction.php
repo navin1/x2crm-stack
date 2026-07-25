@@ -109,6 +109,14 @@ class WebFormAction extends CAction {
                 $model->c_campaign_date = $now;
             }
 
+            // Stamp the web form's own name onto the Contact, same
+            // "always set server-side, not a designer field" treatment as
+            // Campaign Date above — formTitle is already extracted from
+            // the WebForm model earlier in run() (see $webForm->name).
+            if ($model->getField('c_form_label') !== null && !empty($extractedParams['formTitle'])) {
+                $model->c_form_label = $extractedParams['formTitle'];
+            }
+
             if (Yii::app()->contEd('pro')) {
                 foreach ($extractedParams['fieldList'] as $field) {
                     if ($field['required'] &&
