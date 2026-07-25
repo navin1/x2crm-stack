@@ -62,6 +62,7 @@
                         <?php endif; ?>
                     </p>
                 <?php else: ?>
+                    <br>
                     <p class="text-muted">
                         This is the fallback wording for any form that hasn't set its own custom
                         message above. Whether a pracharak or group actually receives it still
