@@ -43,22 +43,31 @@
                     </select>
                 </div>
 
-                <p class="text-muted">
-                    Sends to:
-                    <?php if (!empty($groupNames)): ?>
-                        <strong><?php echo CHtml::encode(implode(', ', $groupNames)); ?></strong>
-                    <?php elseif (!empty($ineligibleGroupNames)): ?>
-                        <em>no groups right now</em> &mdash;
-                        <?php echo CHtml::encode(implode(', ', $ineligibleGroupNames)); ?>
-                        <?php echo count($ineligibleGroupNames) === 1 ? 'is' : 'are'; ?> assigned to this
-                        form but "New-lead notifications" is off for
-                        <?php echo count($ineligibleGroupNames) === 1 ? 'it' : 'them'; ?> &mdash; turn it on
-                        from that group's own page to actually receive this.
-                    <?php else: ?>
-                        <em>no groups assigned to this form</em> &mdash;
-                        <?php echo CHtml::link('assign one on Web Form Notifications', array('webFormNotify')); ?>.
-                    <?php endif; ?>
-                </p>
+                <?php if ($selectedWebFormId): ?>
+                    <p class="text-muted">
+                        Sends to:
+                        <?php if (!empty($groupNames)): ?>
+                            <strong><?php echo CHtml::encode(implode(', ', $groupNames)); ?></strong>
+                        <?php elseif (!empty($ineligibleGroupNames)): ?>
+                            <em>no groups right now</em> &mdash;
+                            <?php echo CHtml::encode(implode(', ', $ineligibleGroupNames)); ?>
+                            <?php echo count($ineligibleGroupNames) === 1 ? 'is' : 'are'; ?> assigned to this
+                            form but "New-lead notifications" is off for
+                            <?php echo count($ineligibleGroupNames) === 1 ? 'it' : 'them'; ?> &mdash; turn it on
+                            from that group's own page to actually receive this.
+                        <?php else: ?>
+                            <em>no groups assigned to this form</em> &mdash;
+                            <?php echo CHtml::link('assign one on Web Form Notifications', array('webFormNotify')); ?>.
+                        <?php endif; ?>
+                    </p>
+                <?php else: ?>
+                    <p class="text-muted">
+                        This is the fallback wording for any form that hasn't set its own custom
+                        message above. Whether a pracharak or group actually receives it still
+                        depends on that specific form's own assignment on
+                        <?php echo CHtml::link('Web Form Notifications', array('webFormNotify')); ?>.
+                    </p>
+                <?php endif; ?>
 
                 <p>
                     Available placeholders — each is replaced with the lead's actual value,
