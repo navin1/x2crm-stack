@@ -56,6 +56,7 @@
             <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
             <?php echo CHtml::link('Web Form Notifications', array('webFormNotify'), array('class' => 'x2-button grey')); ?>
             <?php echo CHtml::link('Lead Forms', array('/marketing/marketing/webleadForm'), array('class' => 'x2-button purple')); ?>
+            <?php echo CHtml::link('Send Message', array('sendMessage'), array('class' => 'x2-button blue')); ?>
         </div>
 
         <?php if (!empty($groups)): ?>

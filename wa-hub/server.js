@@ -846,6 +846,38 @@ async function removeMemberFromGroup(groupId, phone) {
   }
 }
 
+// Sends arbitrary caller-supplied text to an individual phone number on
+// demand — the DM counterpart to sendGroupMessage() below. Used by the
+// "Send WhatsApp Message" X2Flow action (X2FlowSendWhatsAppMessage.php)
+// and the manual admin "Send Message" page. Pre-checks WhatsApp
+// registration first (same reasoning as filterWhatsAppRegistered() for
+// group adds) so a bad/mistyped number fails with a clear reason instead
+// of silently not delivering.
+async function sendIndividualMessage(phone, text) {
+  if (!sock || !isOpen) {
+    throw new Error('WhatsApp not connected');
+  }
+  const cleaned = String(phone || '').replace(/\D/g, '');
+  if (!cleaned) {
+    throw new Error('No destination phone number provided');
+  }
+  const [registered] = await filterWhatsAppRegistered([cleaned]);
+  if (!registered) {
+    const err = new Error('This number is not registered on WhatsApp.');
+    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: false, error: err.message });
+    throw err;
+  }
+  try {
+    await sendWhatsAppMessage(cleaned, { text });
+    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: true });
+    return { success: true };
+  } catch (err) {
+    console.error('wa-hub: failed to send individual message:', err.message || err);
+    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: false, error: err.message });
+    throw err;
+  }
+}
+
 // Posts arbitrary caller-supplied text into a group on demand — distinct
 // from notifyGroupsOfNewLead(), whose text is always rendered server-side
 // from wa_lead_notify_template. Used by the "Send WhatsApp Group Message"
@@ -1714,6 +1746,21 @@ app.post('/admin/groups/:groupId/send', requireAdmin, adminLimiter, async (req, 
 
   try {
     const result = await sendGroupMessage(req.params.groupId, String(text));
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// POST /admin/send-message - Send arbitrary text to an individual phone
+// number on demand (manual admin page or an X2Flow workflow action).
+app.post('/admin/send-message', requireAdmin, adminLimiter, async (req, res) => {
+  const { phone, text } = req.body || {};
+  if (!phone) return res.status(400).json({ error: 'phone is required' });
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
+
+  try {
+    const result = await sendIndividualMessage(phone, String(text));
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });

@@ -143,6 +143,82 @@ class WhatsappGroupsController extends x2base {
     }
 
     /**
+     * Manual admin page: send one WhatsApp message to an individual phone
+     * number on demand. Distinct from Web Form Notifications (automated,
+     * form-triggered) and the group broadcast tools — this is a one-off,
+     * pick-a-number-and-send tool.
+     */
+    public function actionSendMessage() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (Yii::app()->request->isPostRequest) {
+            $phone = trim(Yii::app()->request->getPost('phone', ''));
+            $message = trim(Yii::app()->request->getPost('message', ''));
+            $contactId = (int) Yii::app()->request->getPost('contactId', 0);
+
+            try {
+                if ($phone === '') {
+                    throw new CException('Phone number is required.');
+                }
+                if ($message === '') {
+                    throw new CException('Message cannot be blank.');
+                }
+
+                // If sent via the contact picker, resolve the number from
+                // that Contact's own phone/country directly (rather than
+                // trusting whatever's left in the text box), so a bare
+                // 10-digit number gets its country code filled in — same
+                // normalization used for group membership.
+                $resolvedPhone = $phone;
+                if ($contactId) {
+                    $contact = Contacts::model()->findByPk($contactId);
+                    if ($contact && !empty($contact->phone)) {
+                        $normalized = WhatsAppPhoneUtil::toWhatsAppPhone($contact->phone, $contact->country);
+                        if ($normalized === null) {
+                            throw new CException(
+                                'This contact\'s phone number is missing a country code and their country ' .
+                                'isn\'t one this can map confidently — update the phone number to include a ' .
+                                'country code and try again.'
+                            );
+                        }
+                        $resolvedPhone = $normalized;
+                    }
+                } else {
+                    // Manually-typed number: only touch the confirmed
+                    // "missing country code" shape (exactly 10 digits), and
+                    // only when the admin also specified a country — no
+                    // guessing.
+                    $digits = preg_replace('/\D/', '', $phone);
+                    $country = trim(Yii::app()->request->getPost('country', ''));
+                    if (strlen($digits) === 10 && $country !== '') {
+                        $normalized = WhatsAppPhoneUtil::toWhatsAppPhone($digits, $country);
+                        if ($normalized === null) {
+                            throw new CException('That country isn\'t recognized — include the country code directly in the phone number instead.');
+                        }
+                        $resolvedPhone = $normalized;
+                    } elseif (strlen($digits) === 10) {
+                        throw new CException('This looks like a 10-digit number with no country code — either include the country code in the number, or select a country below.');
+                    }
+                }
+
+                $result = $this->callWaHub('POST', '/admin/send-message', array('phone' => $resolvedPhone, 'text' => $message));
+                if (isset($result['ok']) && $result['ok']) {
+                    Yii::app()->user->setFlash('success', 'Message sent.');
+                } else {
+                    throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
+                }
+            } catch (Exception $e) {
+                Yii::app()->user->setFlash('error', $e->getMessage());
+            }
+
+            $this->redirect(array('sendMessage'));
+        }
+
+        $this->render('sendMessage');
+    }
+
+    /**
      * Live search for the "Add Contacts" picker on the create/add-members
      * pages — used instead of pre-loading every contact into the page, which
      * silently truncated at a fixed limit and made any contact past that cut
@@ -268,42 +344,7 @@ class WhatsappGroupsController extends x2base {
      * that local number pattern.
      */
     private function toWhatsAppPhone($rawPhone, $country) {
-        $digits = preg_replace('/\D/', '', (string) $rawPhone);
-        if ($digits === '') {
-            return null;
-        }
-        if (strlen($digits) !== 10) {
-            return $digits;
-        }
-        $callingCode = $this->countryCallingCode($country);
-        return $callingCode === null ? null : ($callingCode . $digits);
-    }
-
-    /**
-     * Calling codes for the country values actually seen in this
-     * install's data (checked live via a GROUP BY on x2_contacts.country
-     * for 10-digit phones) — a free-text field, so it includes several
-     * spelling variants of the same country. Anything not listed here
-     * (blank, a city/zip code mistakenly entered as the country, etc.)
-     * returns null from here and is skipped by toWhatsAppPhone() rather
-     * than guessed.
-     */
-    private function countryCallingCode($country) {
-        static $callingCodes = array(
-            'usa' => '1', 'us' => '1', 'usa-in' => '1',
-            'united states' => '1', 'united states of america' => '1', 'unitedstates' => '1',
-            'canada' => '1', 'canada-in' => '1',
-            'india' => '91',
-            'russia' => '7',
-            'mexico' => '52',
-            'australia' => '61',
-            'malaysia' => '60',
-            'nepal' => '977',
-            'united arab emirates' => '971',
-            'suriname' => '597',
-        );
-        $key = strtolower(trim((string) $country));
-        return isset($callingCodes[$key]) ? $callingCodes[$key] : null;
+        return WhatsAppPhoneUtil::toWhatsAppPhone($rawPhone, $country);
     }
 
     /**
