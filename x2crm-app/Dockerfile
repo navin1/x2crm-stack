@@ -4,9 +4,10 @@
 FROM php:7.4-apache
 
 RUN apt-get update && apt-get install -y \
-    libpng-dev libjpeg-dev libfreetype6-dev libzip-dev unzip curl git \
+    libpng-dev libjpeg-dev libfreetype6-dev libzip-dev libc-client-dev libkrb5-dev unzip curl git \
     && docker-php-ext-configure gd --with-jpeg --with-freetype \
-    && docker-php-ext-install -j$(nproc) gd mysqli pdo pdo_mysql zip \
+    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-install -j$(nproc) gd mysqli pdo pdo_mysql zip imap \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
 
