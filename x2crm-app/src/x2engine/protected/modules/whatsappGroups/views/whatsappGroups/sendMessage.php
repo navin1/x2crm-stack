@@ -1,7 +1,7 @@
 <?php
 /**
- * Manual admin tool: send one WhatsApp message to an individual phone
- * number on demand.
+ * Manual admin tool: send one WhatsApp message on demand — an individual
+ * phone number (left) or a WhatsApp Group (right).
  */
 ?>
 
@@ -21,7 +21,9 @@
             </div>
         <?php endif; ?>
 
-        <div class="panel panel-default" style="max-width: 600px;">
+        <div class="send-message-columns">
+        <div class="panel panel-default send-message-left">
+            <div class="panel-heading">Send to an Individual</div>
             <div class="panel-body">
                 <?php $form = $this->beginWidget('CActiveForm', array(
                     'action' => array('sendMessage'), 'method' => 'POST',
@@ -78,10 +80,54 @@
                     </div>
 
                     <?php echo CHtml::submitButton('Send', array('class' => 'x2-button highlight')); ?>
-                    <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
 
                 <?php $this->endWidget(); ?>
             </div>
+        </div>
+
+        <div class="panel panel-default send-message-right">
+            <div class="panel-heading">Send to a WhatsApp Group</div>
+            <div class="panel-body">
+                <?php $groupForm = $this->beginWidget('CActiveForm', array(
+                    'action' => array('sendGroupMessage'), 'method' => 'POST',
+                    'htmlOptions' => array('enctype' => 'multipart/form-data'),
+                )); ?>
+
+                    <div class="form-group">
+                        <label for="groupId">WhatsApp Group</label>
+                        <select id="groupId" name="groupId" class="form-control" required>
+                            <option value="">-- Select a group --</option>
+                            <?php foreach ($groups as $g): ?>
+                                <option value="<?php echo CHtml::encode($g['groupId']); ?>">
+                                    <?php echo CHtml::encode($g['groupName']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="groupMessage">Message</label>
+                        <textarea id="groupMessage" name="message" class="form-control" rows="6" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="groupImage">Image Attachment (optional)</label>
+                        <input type="file" id="groupImage" name="groupImage" accept="image/*">
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Sent inline as a photo (with the message above as its caption) — shows up directly
+                            in the chat, not as a separate file download.
+                        </p>
+                    </div>
+
+                    <?php echo CHtml::submitButton('Send to Group', array('class' => 'x2-button highlight')); ?>
+
+                <?php $this->endWidget(); ?>
+            </div>
+        </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
         </div>
     </div>
 </div>
@@ -163,6 +209,7 @@
 
 <style>
     .panel { border: 1px solid #ddd; margin-bottom: 20px; }
+    .panel-heading { background-color: #f5f5f5; padding: 15px; border-bottom: 1px solid #ddd; font-weight: bold; }
     .panel-body { padding: 15px; }
     .form-group { margin-bottom: 16px; }
     .form-group label { display: block; margin-bottom: 6px; font-weight: 600; }
@@ -172,4 +219,10 @@
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .text-muted { color: #6c757d; }
     #x2-layout-content { padding: 0 20px; }
+    .send-message-columns { display: flex; gap: 20px; align-items: stretch; }
+    .send-message-left, .send-message-right { flex: 1 1 0; max-width: 500px; }
+    @media (max-width: 1050px) {
+        .send-message-columns { flex-direction: column; }
+        .send-message-left, .send-message-right { max-width: 600px; width: 100%; }
+    }
 </style>

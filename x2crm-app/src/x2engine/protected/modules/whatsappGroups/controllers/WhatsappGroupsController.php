@@ -245,7 +245,60 @@ class WhatsappGroupsController extends x2base {
             $this->redirect(array('sendMessage'));
         }
 
-        $this->render('sendMessage');
+        $groups = Yii::app()->db->createCommand()
+            ->select('groupId, groupName')
+            ->from('wa_groups')
+            ->order('groupName ASC')
+            ->queryAll();
+
+        $this->render('sendMessage', array('groups' => $groups));
+    }
+
+    /**
+     * POST-only counterpart to actionSendMessage() for the "Send WhatsApp
+     * Group Message" half of the same page — same manual, one-off
+     * send tool, just targeting a group instead of an individual number.
+     * Not logged to any Contact's Activity/History feed (see
+     * actionSendMessage) since a group has no single Contact to log
+     * against.
+     */
+    public function actionSendGroupMessage() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (Yii::app()->request->isPostRequest) {
+            $groupId = trim(Yii::app()->request->getPost('groupId', ''));
+            $message = trim(Yii::app()->request->getPost('message', ''));
+
+            try {
+                if ($groupId === '') {
+                    throw new CException('Please select a WhatsApp group.');
+                }
+                if ($message === '') {
+                    throw new CException('Message cannot be blank.');
+                }
+
+                $payload = array('text' => $message);
+                $uploadedImage = CUploadedFile::getInstanceByName('groupImage');
+                if ($uploadedImage !== null) {
+                    if (strpos($uploadedImage->type, 'image/') !== 0) {
+                        throw new CException('Attachment must be an image.');
+                    }
+                    $payload['imageBase64'] = base64_encode(file_get_contents($uploadedImage->tempName));
+                }
+
+                $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/send', $payload);
+                if (isset($result['ok']) && $result['ok']) {
+                    Yii::app()->user->setFlash('success', 'Message sent to group.');
+                } else {
+                    throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
+                }
+            } catch (Exception $e) {
+                Yii::app()->user->setFlash('error', $e->getMessage());
+            }
+        }
+
+        $this->redirect(array('sendMessage'));
     }
 
     /**
