@@ -23,7 +23,10 @@
 
         <div class="panel panel-default" style="max-width: 600px;">
             <div class="panel-body">
-                <?php $form = $this->beginWidget('CActiveForm', array('action' => array('sendMessage'), 'method' => 'POST')); ?>
+                <?php $form = $this->beginWidget('CActiveForm', array(
+                    'action' => array('sendMessage'), 'method' => 'POST',
+                    'htmlOptions' => array('enctype' => 'multipart/form-data'),
+                )); ?>
 
                     <input type="hidden" id="contactId" name="contactId" value="">
 
@@ -63,6 +66,15 @@
                     <div class="form-group">
                         <label for="message">Message</label>
                         <textarea id="message" name="message" class="form-control" rows="6" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="image">Image Attachment (optional)</label>
+                        <input type="file" id="image" name="image" accept="image/*">
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Sent inline as a photo (with the message above as its caption) — shows up directly
+                            in the chat, not as a separate file download.
+                        </p>
                     </div>
 
                     <?php echo CHtml::submitButton('Send', array('class' => 'x2-button highlight')); ?>

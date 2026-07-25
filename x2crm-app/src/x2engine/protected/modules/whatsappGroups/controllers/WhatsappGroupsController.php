@@ -156,6 +156,7 @@ class WhatsappGroupsController extends x2base {
             $phone = trim(Yii::app()->request->getPost('phone', ''));
             $message = trim(Yii::app()->request->getPost('message', ''));
             $contactId = (int) Yii::app()->request->getPost('contactId', 0);
+            $contact = null;
 
             try {
                 if ($phone === '') {
@@ -202,9 +203,38 @@ class WhatsappGroupsController extends x2base {
                     }
                 }
 
-                $result = $this->callWaHub('POST', '/admin/send-message', array('phone' => $resolvedPhone, 'text' => $message));
+                $payload = array('phone' => $resolvedPhone, 'text' => $message);
+
+                // Optional inline image attachment — read directly and
+                // base64-encode rather than going through X2CRM's Media
+                // model/upload pipeline, since this never needs to persist
+                // as a CRM-managed file, just pass through to wa-hub once.
+                $uploadedImage = CUploadedFile::getInstanceByName('image');
+                if ($uploadedImage !== null) {
+                    if (strpos($uploadedImage->type, 'image/') !== 0) {
+                        throw new CException('Attachment must be an image.');
+                    }
+                    $payload['imageBase64'] = base64_encode(file_get_contents($uploadedImage->tempName));
+                }
+
+                $result = $this->callWaHub('POST', '/admin/send-message', $payload);
                 if (isset($result['ok']) && $result['ok']) {
                     Yii::app()->user->setFlash('success', 'Message sent.');
+
+                    // Log to the Contact's own Activity/History feed, same
+                    // mechanism X2CRM uses for logged emails
+                    // (Actions::associateAction, see InlineEmail::recordEmailSent).
+                    // Only possible when we know which Contact this was —
+                    // a manually-typed number with no picked Contact has
+                    // nothing to log against.
+                    if ($contact) {
+                        Actions::associateAction($contact, array(
+                            'type' => 'whatsapp',
+                            'subject' => 'WhatsApp Message Sent',
+                            'actionDescription' => $message . (isset($payload['imageBase64']) ? "\n[with image attachment]" : ''),
+                            'dueDate' => time(),
+                        ));
+                    }
                 } else {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
                 }

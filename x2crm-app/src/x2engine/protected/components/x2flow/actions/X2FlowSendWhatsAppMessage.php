@@ -37,6 +37,11 @@ class X2FlowSendWhatsAppMessage extends X2FlowAction {
                     'label' => Yii::t('studio', 'Message'),
                     'type' => 'text',
                 ),
+                array(
+                    'name' => 'imageUrl',
+                    'label' => Yii::t('studio', 'Image URL (optional)'),
+                    'optional' => 1,
+                ),
             ),
         ));
     }
@@ -44,6 +49,7 @@ class X2FlowSendWhatsAppMessage extends X2FlowAction {
     public function execute(&$params) {
         $to = $this->parseOption('to', $params, false);
         $message = $this->parseOption('message', $params);
+        $imageUrl = $this->parseOption('imageUrl', $params);
 
         if ($to === null || trim((string) $to) === '') {
             return array(false, Yii::t('app', 'No destination phone number given.'));
@@ -67,10 +73,29 @@ class X2FlowSendWhatsAppMessage extends X2FlowAction {
             $to = $normalized;
         }
 
+        $payload = array('phone' => $to, 'text' => $message);
+        if (!empty($imageUrl)) {
+            $payload['imageUrl'] = $imageUrl;
+        }
+
         try {
-            $this->callWaHub('POST', '/admin/send-message', array('phone' => $to, 'text' => $message));
+            $this->callWaHub('POST', '/admin/send-message', $payload);
         } catch (Exception $e) {
             return array(false, $e->getMessage());
+        }
+
+        // Log to the bound record's own Activity/History feed, same
+        // mechanism X2CRM uses for logged emails (Actions::associateAction,
+        // see InlineEmail::recordEmailSent) — only when this flow is
+        // actually bound to a record (e.g. a Contact), not for a
+        // hardcoded/unrelated "to" number.
+        if (isset($params['model']) && $params['model'] instanceof X2Model && !$params['model']->isNewRecord) {
+            Actions::associateAction($params['model'], array(
+                'type' => 'whatsapp',
+                'subject' => 'WhatsApp Message Sent',
+                'actionDescription' => $message . (!empty($imageUrl) ? "\n[with image attachment]" : ''),
+                'dueDate' => time(),
+            ));
         }
 
         return array(true, YII_UNIT_TESTING ? $message : Yii::t('app', 'WhatsApp message sent.'));

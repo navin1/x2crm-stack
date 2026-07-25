@@ -13,7 +13,10 @@ process.on('unhandledRejection', (reason) => {
 });
 
 const app = express();
-app.use(express.json());
+// Default 100kb is too small for an inline image attachment (base64
+// inflates size ~33%) — wa-hub is internal-only (loopback/Docker network),
+// not public-facing, so a generous shared limit here is low-risk.
+app.use(express.json({ limit: '15mb' }));
 app.use(morgan('tiny'));
 
 const {
@@ -853,7 +856,7 @@ async function removeMemberFromGroup(groupId, phone) {
 // registration first (same reasoning as filterWhatsAppRegistered() for
 // group adds) so a bad/mistyped number fails with a clear reason instead
 // of silently not delivering.
-async function sendIndividualMessage(phone, text) {
+async function sendIndividualMessage(phone, text, imageBuffer) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
   }
@@ -868,14 +871,26 @@ async function sendIndividualMessage(phone, text) {
     throw err;
   }
   try {
-    await sendWhatsAppMessage(cleaned, { text });
-    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: true });
+    // Passing imageCaption: text renders the message text as the image's
+    // caption (inline, part of the same bubble) rather than a separate
+    // text message — matches "attachment that's directly visible".
+    await sendWhatsAppMessage(cleaned, imageBuffer ? { imageBuffer, imageCaption: text } : { text });
+    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned, hasImage: !!imageBuffer }, success: true });
     return { success: true };
   } catch (err) {
     console.error('wa-hub: failed to send individual message:', err.message || err);
     await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: false, error: err.message });
     throw err;
   }
+}
+
+// Fetches an image URL into a Buffer — same approach as the QR logo
+// compositing (axios + responseType: 'arraybuffer'). Used when the caller
+// supplies imageUrl instead of an inline imageBase64 (e.g. the X2Flow
+// action, which has no file-upload UI to work with).
+async function fetchImageBuffer(url) {
+  const resp = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
+  return Buffer.from(resp.data);
 }
 
 // Posts arbitrary caller-supplied text into a group on demand — distinct
@@ -1755,12 +1770,18 @@ app.post('/admin/groups/:groupId/send', requireAdmin, adminLimiter, async (req, 
 // POST /admin/send-message - Send arbitrary text to an individual phone
 // number on demand (manual admin page or an X2Flow workflow action).
 app.post('/admin/send-message', requireAdmin, adminLimiter, async (req, res) => {
-  const { phone, text } = req.body || {};
+  const { phone, text, imageBase64, imageUrl } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'phone is required' });
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
 
   try {
-    const result = await sendIndividualMessage(phone, String(text));
+    let imageBuffer = null;
+    if (imageBase64) {
+      imageBuffer = Buffer.from(imageBase64, 'base64');
+    } else if (imageUrl) {
+      imageBuffer = await fetchImageBuffer(imageUrl);
+    }
+    const result = await sendIndividualMessage(phone, String(text), imageBuffer);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
