@@ -153,54 +153,32 @@ class WhatsappGroupsController extends x2base {
             throw new CHttpException(403, 'Admin access required');
         }
         if (Yii::app()->request->isPostRequest) {
-            $phone = trim(Yii::app()->request->getPost('phone', ''));
             $message = trim(Yii::app()->request->getPost('message', ''));
             $contactId = (int) Yii::app()->request->getPost('contactId', 0);
-            $contact = null;
 
             try {
-                if ($phone === '') {
-                    throw new CException('Phone number is required.');
+                if (!$contactId) {
+                    throw new CException('Please search for and select a Contact — messages can only be sent to people already in your Contacts, not an arbitrary number.');
                 }
                 if ($message === '') {
                     throw new CException('Message cannot be blank.');
                 }
 
-                // If sent via the contact picker, resolve the number from
-                // that Contact's own phone/country directly (rather than
-                // trusting whatever's left in the text box), so a bare
-                // 10-digit number gets its country code filled in — same
-                // normalization used for group membership.
-                $resolvedPhone = $phone;
-                if ($contactId) {
-                    $contact = Contacts::model()->findByPk($contactId);
-                    if ($contact && !empty($contact->phone)) {
-                        $normalized = WhatsAppPhoneUtil::toWhatsAppPhone($contact->phone, $contact->country);
-                        if ($normalized === null) {
-                            throw new CException(
-                                'This contact\'s phone number is missing a country code and their country ' .
-                                'isn\'t one this can map confidently — update the phone number to include a ' .
-                                'country code and try again.'
-                            );
-                        }
-                        $resolvedPhone = $normalized;
-                    }
-                } else {
-                    // Manually-typed number: only touch the confirmed
-                    // "missing country code" shape (exactly 10 digits), and
-                    // only when the admin also specified a country — no
-                    // guessing.
-                    $digits = preg_replace('/\D/', '', $phone);
-                    $country = trim(Yii::app()->request->getPost('country', ''));
-                    if (strlen($digits) === 10 && $country !== '') {
-                        $normalized = WhatsAppPhoneUtil::toWhatsAppPhone($digits, $country);
-                        if ($normalized === null) {
-                            throw new CException('That country isn\'t recognized — include the country code directly in the phone number instead.');
-                        }
-                        $resolvedPhone = $normalized;
-                    } elseif (strlen($digits) === 10) {
-                        throw new CException('This looks like a 10-digit number with no country code — either include the country code in the number, or select a country below.');
-                    }
+                // Always resolve the number from the selected Contact's own
+                // phone/country server-side (never trust a client-supplied
+                // phone value) — same normalization used everywhere else a
+                // Contact's phone is sent to WhatsApp.
+                $contact = Contacts::model()->findByPk($contactId);
+                if (!$contact || empty($contact->phone)) {
+                    throw new CException('That contact has no phone number on file.');
+                }
+                $resolvedPhone = WhatsAppPhoneUtil::toWhatsAppPhone($contact->phone, $contact->country);
+                if ($resolvedPhone === null) {
+                    throw new CException(
+                        'This contact\'s phone number is missing a country code and their country ' .
+                        'isn\'t one this can map confidently — update the phone number to include a ' .
+                        'country code and try again.'
+                    );
                 }
 
                 $payload = array('phone' => $resolvedPhone, 'text' => $message);
@@ -224,17 +202,12 @@ class WhatsappGroupsController extends x2base {
                     // Log to the Contact's own Activity/History feed, same
                     // mechanism X2CRM uses for logged emails
                     // (Actions::associateAction, see InlineEmail::recordEmailSent).
-                    // Only possible when we know which Contact this was —
-                    // a manually-typed number with no picked Contact has
-                    // nothing to log against.
-                    if ($contact) {
-                        Actions::associateAction($contact, array(
-                            'type' => 'whatsapp',
-                            'subject' => 'WhatsApp Message Sent',
-                            'actionDescription' => $message . (isset($payload['imageBase64']) ? "\n[with image attachment]" : ''),
-                            'dueDate' => time(),
-                        ));
-                    }
+                    Actions::associateAction($contact, array(
+                        'type' => 'whatsapp',
+                        'subject' => 'WhatsApp Message Sent',
+                        'actionDescription' => $message . (isset($payload['imageBase64']) ? "\n[with image attachment]" : ''),
+                        'dueDate' => time(),
+                    ));
                 } else {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
                 }

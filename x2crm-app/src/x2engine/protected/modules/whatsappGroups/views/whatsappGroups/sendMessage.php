@@ -33,36 +33,15 @@
                     <input type="hidden" id="contactId" name="contactId" value="">
 
                     <div class="form-group">
-                        <label>Find a Contact (optional)</label>
+                        <label>Find a Contact <span style="color: red;">*</span></label>
                         <p class="text-muted">
-                            Search and pick a Contact to auto-fill their number (and correctly resolve their
-                            country code), or just type a phone number directly below.
+                            Messages can only be sent to people already in your Contacts — search and select
+                            one below. Their number and country code are resolved automatically from their
+                            Contact record.
                         </p>
                         <input type="text" id="contactFilter" class="form-control" placeholder="Search by name or phone...">
                         <div id="contactResults" style="max-height: 220px; overflow-y: auto; border: 1px solid #ddd; margin-top: 8px; display: none;"></div>
                         <div id="selectedContact" style="margin-top: 8px;"></div>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="phone">Phone Number</label>
-                        <input type="text" id="phone" name="phone" class="form-control" placeholder="e.g., 7603907974" required>
-                    </div>
-
-                    <div class="form-group" id="countryGroup">
-                        <label for="country">Country (only needed for a 10-digit number with no country code)</label>
-                        <select id="country" name="country" class="form-control">
-                            <option value="">-- Not needed / already includes country code --</option>
-                            <option value="usa">USA</option>
-                            <option value="canada">Canada</option>
-                            <option value="india">India</option>
-                            <option value="russia">Russia</option>
-                            <option value="mexico">Mexico</option>
-                            <option value="australia">Australia</option>
-                            <option value="malaysia">Malaysia</option>
-                            <option value="nepal">Nepal</option>
-                            <option value="united arab emirates">United Arab Emirates</option>
-                            <option value="suriname">Suriname</option>
-                        </select>
                     </div>
 
                     <div class="form-group">
@@ -138,30 +117,34 @@
     var filterInput = document.getElementById('contactFilter');
     var resultsBox = document.getElementById('contactResults');
     var selectedBox = document.getElementById('selectedContact');
-    var phoneInput = document.getElementById('phone');
     var contactIdInput = document.getElementById('contactId');
-    var countryGroup = document.getElementById('countryGroup');
     var searchTimer = null;
 
     function selectContact(id, name, phone) {
         contactIdInput.value = id;
-        phoneInput.value = phone;
-        phoneInput.readOnly = true;
-        countryGroup.style.display = 'none';
         resultsBox.style.display = 'none';
         resultsBox.innerHTML = '';
         filterInput.value = '';
-        selectedBox.innerHTML = '<span class="text-muted">Selected: <strong>' + name + '</strong> (' + phone + ')</span> ' +
-            '<a href="#" id="clearContact">Clear</a>';
+        filterInput.style.display = 'none';
+        selectedBox.innerHTML = '<span class="text-muted">Sending to: <strong>' + name + '</strong> (' + phone + ')</span> ' +
+            '<a href="#" id="clearContact">Change</a>';
         document.getElementById('clearContact').addEventListener('click', function (e) {
             e.preventDefault();
             contactIdInput.value = '';
-            phoneInput.value = '';
-            phoneInput.readOnly = false;
-            countryGroup.style.display = '';
+            filterInput.style.display = '';
             selectedBox.innerHTML = '';
         });
     }
+
+    // Block submission (rather than only relying on the server-side
+    // rejection) if no Contact has actually been picked — messages can
+    // only go to a person already in Contacts, never a typed-in number.
+    filterInput.closest('form').addEventListener('submit', function (e) {
+        if (!contactIdInput.value) {
+            e.preventDefault();
+            alert('Please search for and select a Contact first.');
+        }
+    });
 
     function renderResults(contacts) {
         if (contacts.length === 0) {
