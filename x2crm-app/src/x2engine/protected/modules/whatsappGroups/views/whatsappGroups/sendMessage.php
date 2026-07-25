@@ -105,6 +105,57 @@
         </div>
         </div>
 
+        <div class="panel panel-default">
+            <div class="panel-heading">Broadcast to a Contact List</div>
+            <div class="panel-body">
+                <p class="text-muted">
+                    WhatsApp's own Broadcast List feature isn't something this tool can create or manage —
+                    so this sends the same message individually to every Contact in the list you pick below
+                    (each logged to that Contact's own Activity/History, same as a regular individual
+                    message). Sends are spaced out to avoid looking spam-like to WhatsApp, so a large list
+                    will take a while — the page will wait until it's done rather than send in the
+                    background, so please don't navigate away once you click Send.
+                </p>
+                <?php $broadcastForm = $this->beginWidget('CActiveForm', array(
+                    'action' => array('broadcastMessage'), 'method' => 'POST',
+                    'htmlOptions' => array('enctype' => 'multipart/form-data'),
+                )); ?>
+
+                    <div class="form-group">
+                        <label for="listId">Contact List</label>
+                        <select id="listId" name="listId" class="form-control" style="max-width: 400px;" required>
+                            <option value="">-- Select a list --</option>
+                            <?php foreach ($lists as $list): ?>
+                                <option value="<?php echo (int) $list->id; ?>">
+                                    <?php echo CHtml::encode($list->name); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="broadcastMessage">Message</label>
+                        <textarea id="broadcastMessage" name="message" class="form-control" rows="6" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="broadcastImage">Image Attachment (optional)</label>
+                        <input type="file" id="broadcastImage" name="image" accept="image/*">
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Sent inline as a photo (with the message above as its caption) — shows up directly
+                            in the chat, not as a separate file download.
+                        </p>
+                    </div>
+
+                    <?php echo CHtml::submitButton('Send Broadcast', array(
+                        'class' => 'x2-button highlight',
+                        'confirm' => 'Send this message individually to every contact in the selected list? This cannot be undone once started.',
+                    )); ?>
+
+                <?php $this->endWidget(); ?>
+            </div>
+        </div>
+
         <div style="margin-top: 20px;">
             <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
         </div>

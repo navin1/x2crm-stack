@@ -224,7 +224,7 @@ class WhatsappGroupsController extends x2base {
             ->order('groupName ASC')
             ->queryAll();
 
-        $this->render('sendMessage', array('groups' => $groups));
+        $this->render('sendMessage', array('groups' => $groups, 'lists' => $this->getAccessibleContactLists()));
     }
 
     /**
@@ -266,6 +266,123 @@ class WhatsappGroupsController extends x2base {
                 } else {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
                 }
+            } catch (Exception $e) {
+                Yii::app()->user->setFlash('error', $e->getMessage());
+            }
+        }
+
+        $this->redirect(array('sendMessage'));
+    }
+
+    /**
+     * Manual "broadcast" tool: sends the same message individually to
+     * every Contact in a chosen list — WhatsApp's real Broadcast List
+     * feature isn't something this stack can build (Baileys, the library
+     * wa-hub is built on, has no API for creating/managing one — it only
+     * knows the unrelated status@broadcast, i.e. WhatsApp Status). This is
+     * the practical equivalent: a loop of ordinary individual sends, each
+     * logged to that Contact's own Activity/History like any other
+     * individual message. Deliberately synchronous (not backgrounded) —
+     * simplest correct option for typical list sizes; a large list takes
+     * proportionally longer since each send is throttled below.
+     */
+    public function actionBroadcastMessage() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (Yii::app()->request->isPostRequest) {
+            set_time_limit(0);
+
+            $listId = (int) Yii::app()->request->getPost('listId', 0);
+            $message = trim(Yii::app()->request->getPost('message', ''));
+
+            try {
+                if (!$listId) {
+                    throw new CException('Please select a Contact List.');
+                }
+                if ($message === '') {
+                    throw new CException('Message cannot be blank.');
+                }
+
+                $list = X2List::model()->findByPk($listId);
+                if (!$list || $list->modelName !== 'Contacts') {
+                    throw new CException('List not found.');
+                }
+
+                // Same reasoning as getListPhones() for bypassing
+                // X2List::load()'s per-current-user scoping and
+                // queryCriteria()'s default access restriction — this is
+                // an admin-triggered send, not a filtered view, so it
+                // should reach the list's true full membership.
+                $contacts = Contacts::model()->findAll($list->queryCriteria(false));
+                if (empty($contacts)) {
+                    throw new CException('That list has no contacts.');
+                }
+
+                $imageBase64 = null;
+                $uploadedImage = CUploadedFile::getInstanceByName('image');
+                if ($uploadedImage !== null) {
+                    if (strpos($uploadedImage->type, 'image/') !== 0) {
+                        throw new CException('Attachment must be an image.');
+                    }
+                    $imageBase64 = base64_encode(file_get_contents($uploadedImage->tempName));
+                }
+
+                $total = count($contacts);
+                $sent = 0;
+                $skipped = 0;
+                $failed = 0;
+                $i = 0;
+
+                foreach ($contacts as $contact) {
+                    $i++;
+
+                    $resolvedPhone = empty($contact->phone)
+                        ? null : WhatsAppPhoneUtil::toWhatsAppPhone($contact->phone, $contact->country);
+                    if ($resolvedPhone === null) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    $payload = array('phone' => $resolvedPhone, 'text' => $message);
+                    if ($imageBase64) {
+                        $payload['imageBase64'] = $imageBase64;
+                    }
+
+                    try {
+                        $result = $this->callWaHub('POST', '/admin/send-message', $payload);
+                        if (isset($result['ok']) && $result['ok']) {
+                            $sent++;
+                            Actions::associateAction($contact, array(
+                                'type' => 'whatsapp',
+                                'subject' => 'WhatsApp Broadcast Sent',
+                                'actionDescription' => $message . ($imageBase64 ? "\n[with image attachment]" : ''),
+                                'dueDate' => time(),
+                            ));
+                        } else {
+                            $failed++;
+                        }
+                    } catch (Exception $e) {
+                        $failed++;
+                    }
+
+                    // Space sends out rather than firing as fast as
+                    // possible — reduces the chance WhatsApp flags the
+                    // paired account for bulk/spam-like behavior. Skipped
+                    // after the last contact.
+                    if ($i < $total) {
+                        sleep(1);
+                    }
+                }
+
+                $summary = "Broadcast complete: sent to $sent of $total contact(s).";
+                if ($skipped > 0) {
+                    $summary .= " $skipped skipped (no usable phone number).";
+                }
+                if ($failed > 0) {
+                    $summary .= " $failed failed to send.";
+                }
+                Yii::app()->user->setFlash(($failed > 0 || $sent === 0) ? 'error' : 'success', $summary);
             } catch (Exception $e) {
                 Yii::app()->user->setFlash('error', $e->getMessage());
             }
