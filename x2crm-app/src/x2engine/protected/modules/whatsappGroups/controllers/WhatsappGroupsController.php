@@ -344,7 +344,19 @@ class WhatsappGroupsController extends x2base {
                         continue;
                     }
 
-                    $payload = array('phone' => $resolvedPhone, 'text' => $message);
+                    // Personalize per-contact so the same broadcast reads
+                    // as an individual message, not an obvious mail-merge
+                    // blast — {{fullName}} falls back to whichever of
+                    // first/last name is actually set, rather than a
+                    // dangling space when only one is on file.
+                    $fullName = trim($contact->firstName . ' ' . $contact->lastName);
+                    $personalizedMessage = strtr($message, array(
+                        '{{firstName}}' => $contact->firstName ?: '',
+                        '{{lastName}}' => $contact->lastName ?: '',
+                        '{{fullName}}' => $fullName !== '' ? $fullName : ($contact->firstName ?: $contact->lastName ?: ''),
+                    ));
+
+                    $payload = array('phone' => $resolvedPhone, 'text' => $personalizedMessage);
                     if ($imageBase64) {
                         $payload['imageBase64'] = $imageBase64;
                     }
@@ -356,7 +368,7 @@ class WhatsappGroupsController extends x2base {
                             Actions::associateAction($contact, array(
                                 'type' => 'whatsapp',
                                 'subject' => 'WhatsApp Broadcast Sent',
-                                'actionDescription' => $message . ($imageBase64 ? "\n[with image attachment]" : ''),
+                                'actionDescription' => $personalizedMessage . ($imageBase64 ? "\n[with image attachment]" : ''),
                                 'dueDate' => time(),
                             ));
                         } else {

@@ -136,6 +136,11 @@
                     <div class="form-group">
                         <label for="broadcastMessage">Message</label>
                         <textarea id="broadcastMessage" name="message" class="form-control" rows="6" required></textarea>
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Optional placeholders, replaced per-contact so each person gets a personalized
+                            message instead of an identical mass blast:
+                            <code>{{firstName}}</code>, <code>{{lastName}}</code>, <code>{{fullName}}</code>
+                        </p>
                     </div>
 
                     <div class="form-group">
