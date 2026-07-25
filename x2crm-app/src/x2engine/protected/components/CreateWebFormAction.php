@@ -106,9 +106,17 @@ class CreateWebFormAction extends CAction {
             if (isset ($_POST['generateLead']) && isset ($_POST['leadSource'])) {
                 $model->leadSource = $_POST['leadSource'];
                 $model->generateLead = 1;
-            } else {
+            } elseif ($model->isNewRecord) {
+                // Brand-new form, nothing configured yet — default off.
                 $model->generateLead = 0;
             }
+            // else: an existing form being re-saved from the Designer,
+            // which never sends generateLead/leadSource at all (they
+            // belong entirely to the separate Web Form Notifications
+            // feature — see WhatsappGroupsController::actionSaveWebFormNotify).
+            // Leave them as already configured there rather than silently
+            // wiping out lead generation (and therefore all WhatsApp
+            // notifications) on every unrelated Designer save.
             if (isset ($_POST['generateAccount'])) {
                 $model->generateAccount = 1;
             } else {
