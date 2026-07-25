@@ -52,7 +52,7 @@
 
         <div class="btn-group" style="margin-bottom: 15px;">
             <?php echo CHtml::link('Create Group', array('create'), array('class' => 'x2-button highlight')); ?>
-            <?php echo CHtml::link('Sync from WhatsApp', array('sync'), array('class' => 'x2-button blue', 'confirm' => 'Sync all groups from WhatsApp?')); ?>
+            <span class="x2-button blue disabled" title="Temporarily disabled">Sync from WhatsApp</span>
             <?php echo CHtml::link('Edit New-Lead Message', array('editNotifyTemplate'), array('class' => 'x2-button orange')); ?>
             <?php echo CHtml::link('Web Form Notifications', array('webFormNotify'), array('class' => 'x2-button grey')); ?>
             <?php echo CHtml::link('Lead Forms', array('/marketing/marketing/webleadForm'), array('class' => 'x2-button purple')); ?>
@@ -64,7 +64,7 @@
             <table class="table table-striped table-hover">
                 <thead>
                     <tr>
-                        <th>Group Name</th>
+                        <th>WhatsApp Group Name</th>
                         <th>Members</th>
                         <th>Linked Contact List</th>
                         <th>Synced</th>
@@ -122,7 +122,7 @@
             </div>
         <?php else: ?>
             <div class="alert alert-info">
-                No WhatsApp groups found. <?php echo CHtml::link('Create one', array('create')); ?> or <?php echo CHtml::link('sync from WhatsApp', array('sync')); ?>.
+                No WhatsApp groups found. <?php echo CHtml::link('Create one', array('create')); ?>.
             </div>
         <?php endif; ?>
     </div>
@@ -180,6 +180,11 @@
     .x2-button.purple:active, .x2-button.purple.clicked {
         background-color: #472980;
         box-shadow: inset 0 1px 1px 0 #38206b;
+    }
+    .x2-button.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
     }
     /* Wasn't defined anywhere on this page before — the "Synced" column's
        Yes/No labels were rendering as plain unstyled text with no colored
