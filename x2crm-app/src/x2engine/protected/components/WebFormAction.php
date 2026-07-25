@@ -99,6 +99,15 @@ class WebFormAction extends CAction {
             }
             $now = time();
 
+            // Campaign Date always reflects the actual submission moment,
+            // regardless of whatever the form's own hidden-field config
+            // says (or whether that field is even on this particular
+            // form) — set unconditionally here rather than trusting a
+            // designer-configured value, which could otherwise go stale
+            // between when the form was built and when it's submitted.
+            if ($model->getField('c_campaign_date') !== null) {
+                $model->c_campaign_date = $now;
+            }
 
             if (Yii::app()->contEd('pro')) {
                 foreach ($extractedParams['fieldList'] as $field) {

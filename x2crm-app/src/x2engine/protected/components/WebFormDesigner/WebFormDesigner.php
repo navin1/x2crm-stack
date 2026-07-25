@@ -92,7 +92,14 @@ class WebFormDesigner extends X2Widget {
      */
     public $defaultList = array();
 
-    
+    /**
+     * Field names from $defaultList whose "Type:" dropdown should default
+     * to "hidden" (with an admin-set fixed value) instead of "normal"
+     * (visible to the person filling out the form).
+     * @var array
+     */
+    public $hiddenByDefault = array();
+
     public $excludeList = array();
     
 
@@ -211,7 +218,7 @@ class WebFormDesigner extends X2Widget {
     /*
     Inserts a single custom field element into the DOM
     */
-    public function displayCustomField ($field, $type, $item, $editable=false) {
+    public function displayCustomField ($field, $type, $item, $editable=false, $defaultFieldType='normal') {
         echo '<li class="um-state-default" name="'.$field->fieldName.'">';
         echo "<label class=\"$type\">".
             Yii::t('services',$field->attributeLabel)."</label>";
@@ -252,7 +259,7 @@ class WebFormDesigner extends X2Widget {
         );
         echo '<br />';
         echo CHtml::label(
-            Yii::t('marketing','Label:').' ',
+            ($defaultFieldType === 'hidden' ? Yii::t('marketing','Value:') : Yii::t('marketing','Label:')).' ',
             $field->fieldName . '_label',
             array(
                 'style'=>'display: inline; padding: 0;',
@@ -284,7 +291,7 @@ class WebFormDesigner extends X2Widget {
             array('style'=>'display: inline; padding: 0;')
         );
         echo CHtml::dropDownList(
-            $field->fieldName . '_type', 'normal',
+            $field->fieldName . '_type', $defaultFieldType,
             array('normal'=>Yii::t('app','normal'), 'hidden'=>Yii::t('app','hidden')),
             array(
                 'class'=>'field-type',
@@ -338,7 +345,8 @@ class WebFormDesigner extends X2Widget {
                     default:
                         $type = 'varcharIcon';
                 }
-                $this->displayCustomField ($field, $type, $item, $editable);
+                $defaultFieldType = in_array($field->fieldName, $this->hiddenByDefault) ? 'hidden' : 'normal';
+                $this->displayCustomField ($field, $type, $item, $editable, $defaultFieldType);
             }
         }
     }

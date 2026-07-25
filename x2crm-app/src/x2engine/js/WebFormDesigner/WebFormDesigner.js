@@ -130,9 +130,14 @@ x2.WebFormDesigner = (function() {
             
 
             // Reset Field Container
+            // Weblead-only default hidden fields (campaign/program
+            // tracking) are kept here too, alongside the other defaults —
+            // harmless no-op for form types (weblist/service) that don't
+            // have these fields in #sortable2 to begin with.
             $('#sortable2 li')
             .not('[name=firstName], [name=lastName]')
             .not('[name=backgroundInfo], [name=email]')
+            .not('[name=c_campaign_name], [name=c_campaign_state], [name=c_campaign_city], [name=c_program_date], [name=c_campaign_date]')
             .prependTo($('#sortable1'));
 
             // Clear Code mirror stuff
