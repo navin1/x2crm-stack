@@ -293,6 +293,32 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
         $whatsappBody = substr($whatsappBody, 0, -strlen($whatsappFromMatch[0]));
     }
     echo Yii::app()->controller->convertUrls($whatsappBody);
+
+    // Any attachment actually sent (image/PDF) was persisted by
+    // WhatsappGroupsController::saveMessageAttachment(), keyed to this
+    // Action's own id — look it up directly rather than via an AR
+    // relation, since wa_message_attachments is a small custom table
+    // outside the core schema. Images use the "attachment-img" class so
+    // ActionHistory.js's existing click-to-enlarge behavior picks them up
+    // automatically, same as every other inline image in this feed.
+    $whatsappAttachment = Yii::app()->db->createCommand()
+        ->select('kind, fileName')
+        ->from('wa_message_attachments')
+        ->where('actionId=:id', array(':id' => $data->id))
+        ->queryRow();
+    if ($whatsappAttachment) {
+        $whatsappAttachmentUrl = Yii::app()->createUrl(
+            '/whatsappGroups/whatsappGroups/messageAttachment', array('actionId' => $data->id));
+        if ($whatsappAttachment['kind'] === 'image') {
+            echo '<br /><img class="attachment-img" src="' . CHtml::encode($whatsappAttachmentUrl) . '" ' .
+                'style="max-width: 220px; max-height: 220px; border-radius: 6px; margin-top: 6px; cursor: pointer;">';
+        } elseif ($whatsappAttachment['kind'] === 'document') {
+            echo '<br />' . CHtml::link(
+                X2Html::fa('fa-file-pdf-o') . ' ' .
+                    CHtml::encode($whatsappAttachment['fileName'] ?: Yii::t('actions', 'Document')),
+                $whatsappAttachmentUrl, array('target' => '_blank'));
+        }
+    }
 } else {
     if (isset($data->subject) && $data->subject !== '' && !ctype_space($data->subject)) {
         echo '<b>'.Yii::t('actions', 'Subject: ').'</b>'. Yii::app()->controller->convertUrls($data->subject);

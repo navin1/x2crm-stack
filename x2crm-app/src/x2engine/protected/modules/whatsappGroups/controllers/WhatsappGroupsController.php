@@ -228,13 +228,16 @@ class WhatsappGroupsController extends x2base {
                     // than a number that could go stale if the connected
                     // account is ever swapped later.
                     $fromPhoneNote = !empty($result['fromPhone']) ? "\n[from:" . $result['fromPhone'] . "]" : '';
-                    Actions::associateAction($contact, array(
+                    $loggedAction = Actions::associateAction($contact, array(
                         'type' => 'whatsapp',
                         'subject' => 'WhatsApp Message Sent',
                         'actionDescription' => $message . $attachmentNote . $fromPhoneNote,
                         'dueDate' => time(),
                         'completedBy' => Yii::app()->user->getName(),
                     ));
+                    if ($loggedAction) {
+                        $this->saveMessageAttachment($loggedAction->id, $payload);
+                    }
                 } else {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
                 }
@@ -408,13 +411,21 @@ class WhatsappGroupsController extends x2base {
                                 ? "\n[with image attachment]"
                                 : (isset($attachmentPayload['documentBase64']) ? "\n[with PDF attachment]" : '');
                             $fromPhoneNote = !empty($result['fromPhone']) ? "\n[from:" . $result['fromPhone'] . "]" : '';
-                            Actions::associateAction($contact, array(
+                            $loggedAction = Actions::associateAction($contact, array(
                                 'type' => 'whatsapp',
                                 'subject' => 'WhatsApp Broadcast Sent',
                                 'actionDescription' => $personalizedMessage . $attachmentNote . $fromPhoneNote,
                                 'dueDate' => time(),
                                 'completedBy' => Yii::app()->user->getName(),
                             ));
+                            if ($loggedAction) {
+                                // Same attachment bytes for every recipient
+                                // in this broadcast — stored once per
+                                // recipient's own Action row rather than
+                                // shared, so each history entry stays
+                                // independently viewable/deletable.
+                                $this->saveMessageAttachment($loggedAction->id, $attachmentPayload);
+                            }
                         } else {
                             $failed++;
                         }
@@ -655,6 +666,7 @@ class WhatsappGroupsController extends x2base {
             $mimeType = $uploaded->type;
             if (strpos($mimeType, 'image/') === 0) {
                 $payload['imageBase64'] = base64_encode(file_get_contents($uploaded->tempName));
+                $payload['imageMimeType'] = $mimeType;
             } elseif ($mimeType === 'application/pdf') {
                 $payload['documentBase64'] = base64_encode(file_get_contents($uploaded->tempName));
                 $payload['documentMimeType'] = $mimeType;
@@ -673,11 +685,99 @@ class WhatsappGroupsController extends x2base {
                 ->queryRow();
             if ($template && $template['attachmentKind'] === 'image') {
                 $payload['imageBase64'] = base64_encode($template['attachmentData']);
+                $payload['imageMimeType'] = $template['attachmentMimeType'];
             } elseif ($template && $template['attachmentKind'] === 'document') {
                 $payload['documentBase64'] = base64_encode($template['attachmentData']);
                 $payload['documentMimeType'] = $template['attachmentMimeType'];
                 $payload['documentFileName'] = $template['attachmentFileName'];
             }
+        }
+    }
+
+    /**
+     * Persists the attachment actually sent (image or PDF) so it can be
+     * viewed later from the Contact's Activity/History feed — the send
+     * itself never touched X2CRM's own storage (see applyOutgoingAttachment
+     * above), so without this the feed only ever had a "[with image
+     * attachment]" text note, no way to actually see it again.
+     * $payload is whatever applyOutgoingAttachment() built (imageBase64 or
+     * documentBase64/documentMimeType/documentFileName); a no-op if it has
+     * neither key (no attachment was sent).
+     */
+    private function saveMessageAttachment($actionId, $payload) {
+        if (isset($payload['imageBase64'])) {
+            $kind = 'image';
+            $data = base64_decode($payload['imageBase64']);
+            $mimeType = !empty($payload['imageMimeType']) ? $payload['imageMimeType'] : 'image/jpeg';
+            $fileName = null;
+        } elseif (isset($payload['documentBase64'])) {
+            $kind = 'document';
+            $data = base64_decode($payload['documentBase64']);
+            $mimeType = !empty($payload['documentMimeType']) ? $payload['documentMimeType'] : 'application/pdf';
+            $fileName = !empty($payload['documentFileName']) ? $payload['documentFileName'] : null;
+        } else {
+            return;
+        }
+
+        $this->ensureMessageAttachmentsTable();
+        Yii::app()->db->createCommand()->insert('wa_message_attachments', array(
+            'actionId' => $actionId,
+            'kind' => $kind,
+            'data' => $data,
+            'mimeType' => $mimeType,
+            'fileName' => $fileName,
+        ));
+    }
+
+    /**
+     * AJAX/direct endpoint the History feed's WhatsApp entries use to
+     * actually display an attachment — open to any logged-in user (not
+     * admin-only) since the feed itself is visible to any user who can see
+     * the associated Contact, matching that same access level.
+     */
+    public function actionMessageAttachment($actionId) {
+        if (Yii::app()->user->isGuest) {
+            throw new CHttpException(403, 'Login required');
+        }
+        $attachment = Yii::app()->db->createCommand()
+            ->select('data, mimeType, fileName')
+            ->from('wa_message_attachments')
+            ->where('actionId=:id', array(':id' => (int) $actionId))
+            ->queryRow();
+        if (!$attachment) {
+            throw new CHttpException(404, 'No attachment.');
+        }
+        header('Content-Type: ' . $attachment['mimeType']);
+        if (!empty($attachment['fileName'])) {
+            header('Content-Disposition: inline; filename="' . addslashes($attachment['fileName']) . '"');
+        }
+        echo $attachment['data'];
+        Yii::app()->end();
+    }
+
+    /**
+     * Self-heal table creation, same convention as
+     * ensureMessageTemplatesTable().
+     */
+    private function ensureMessageAttachmentsTable() {
+        $db = Yii::app()->db;
+        $exists = $db->createCommand(
+            "SELECT COUNT(*) FROM information_schema.TABLES " .
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wa_message_attachments'"
+        )->queryScalar();
+        if (!$exists) {
+            $db->createCommand(
+                "CREATE TABLE wa_message_attachments (" .
+                "id INT PRIMARY KEY AUTO_INCREMENT, " .
+                "actionId INT NOT NULL, " .
+                "kind VARCHAR(20) NOT NULL, " .
+                "data LONGBLOB NOT NULL, " .
+                "mimeType VARCHAR(100) NOT NULL, " .
+                "fileName VARCHAR(255) NULL, " .
+                "createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " .
+                "KEY (actionId)" .
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            )->execute();
         }
     }
 

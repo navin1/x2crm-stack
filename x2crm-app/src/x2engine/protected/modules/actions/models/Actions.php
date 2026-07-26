@@ -119,7 +119,12 @@ class Actions extends X2Model {
             'complete' => 'Yes',
             'updatedBy' => 'admin',
         ), $attributes), false);
-        return $action->save();
+        // Returns the saved model (truthy, and lets callers that need the
+        // new row's id use it — e.g. WhatsappGroupsController persisting an
+        // attachment keyed to this Action) rather than a plain bool, while
+        // staying a safe drop-in for existing callers that only ever check
+        // this in a boolean context (an object is truthy; false stays falsy).
+        return $action->save() ? $action : false;
     }
 
     /**
