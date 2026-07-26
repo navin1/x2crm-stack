@@ -16,7 +16,7 @@ const app = express();
 // Default 100kb is too small for an inline image attachment (base64
 // inflates size ~33%) — wa-hub is internal-only (loopback/Docker network),
 // not public-facing, so a generous shared limit here is low-risk.
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '20mb' }));
 app.use(morgan('tiny'));
 
 const {
@@ -262,7 +262,7 @@ async function flattenImageToWhite(buffer) {
   }
 }
 
-async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption } = {}) {
+async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption, documentBuffer, documentMimeType, documentFileName } = {}) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
   }
@@ -275,6 +275,16 @@ async function sendWhatsAppMessage(toPhone, { text, imageBuffer, imageCaption } 
   if (imageBuffer) {
     const flattened = await flattenImageToWhite(imageBuffer);
     await sock.sendMessage(jid, { image: flattened, caption: imageCaption || text || '' });
+  } else if (documentBuffer) {
+    // Sent as a proper WhatsApp "document" message (not a link) — the
+    // recipient's client renders it inline with its own icon/preview as
+    // soon as the message arrives, same "directly visible" bar as images.
+    await sock.sendMessage(jid, {
+      document: documentBuffer,
+      mimetype: documentMimeType || 'application/pdf',
+      fileName: documentFileName || 'document.pdf',
+      caption: text || '',
+    });
   } else {
     await sock.sendMessage(jid, { text: text || '' });
   }
@@ -881,7 +891,7 @@ async function removeMemberFromGroup(groupId, phone) {
 // registration first (same reasoning as filterWhatsAppRegistered() for
 // group adds) so a bad/mistyped number fails with a clear reason instead
 // of silently not delivering.
-async function sendIndividualMessage(phone, text, imageBuffer) {
+async function sendIndividualMessage(phone, text, imageBuffer, document) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
   }
@@ -898,9 +908,18 @@ async function sendIndividualMessage(phone, text, imageBuffer) {
   try {
     // Passing imageCaption: text renders the message text as the image's
     // caption (inline, part of the same bubble) rather than a separate
-    // text message — matches "attachment that's directly visible".
-    await sendWhatsAppMessage(cleaned, imageBuffer ? { imageBuffer, imageCaption: text } : { text });
-    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned, hasImage: !!imageBuffer }, success: true });
+    // text message — matches "attachment that's directly visible". A
+    // document (e.g. PDF) gets the same caption treatment.
+    let payload;
+    if (imageBuffer) {
+      payload = { imageBuffer, imageCaption: text };
+    } else if (document) {
+      payload = { documentBuffer: document.buffer, documentMimeType: document.mimeType, documentFileName: document.fileName, text };
+    } else {
+      payload = { text };
+    }
+    await sendWhatsAppMessage(cleaned, payload);
+    await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned, hasImage: !!imageBuffer, hasDocument: !!document }, success: true });
     return { success: true };
   } catch (err) {
     console.error('wa-hub: failed to send individual message:', err.message || err);
@@ -923,7 +942,7 @@ async function fetchImageBuffer(url) {
 // from wa_lead_notify_template. Used by the "Send WhatsApp Group Message"
 // X2Flow action (X2FlowWhatsAppGroupMessage.php) so workflows can post a
 // scheduled/triggered message, and by the equivalent admin endpoint below.
-async function sendGroupMessage(groupId, text, imageBuffer) {
+async function sendGroupMessage(groupId, text, imageBuffer, document) {
   if (!sock || !isOpen) {
     throw new Error('WhatsApp not connected');
   }
@@ -933,10 +952,17 @@ async function sendGroupMessage(groupId, text, imageBuffer) {
       // (individual sends) — see flattenImageToWhite() for why.
       const flattened = await flattenImageToWhite(imageBuffer);
       await sock.sendMessage(groupId, { image: flattened, caption: text || '' });
+    } else if (document) {
+      await sock.sendMessage(groupId, {
+        document: document.buffer,
+        mimetype: document.mimeType || 'application/pdf',
+        fileName: document.fileName || 'document.pdf',
+        caption: text || '',
+      });
     } else {
       await sock.sendMessage(groupId, { text });
     }
-    await logAdminAction({ action: 'send_group_message', params: { groupId, hasImage: !!imageBuffer }, success: true });
+    await logAdminAction({ action: 'send_group_message', params: { groupId, hasImage: !!imageBuffer, hasDocument: !!document }, success: true });
     return { success: true };
   } catch (err) {
     console.error('wa-hub: failed to send group message:', err.message || err);
@@ -1788,17 +1814,20 @@ app.post('/admin/groups/:groupId/rename', requireAdmin, adminLimiter, async (req
 // notify-new-lead/notify-new-form, which always render from the saved
 // lead-notify template rather than accepting caller-supplied text.
 app.post('/admin/groups/:groupId/send', requireAdmin, adminLimiter, async (req, res) => {
-  const { text, imageBase64, imageUrl } = req.body || {};
+  const { text, imageBase64, imageUrl, documentBase64, documentMimeType, documentFileName } = req.body || {};
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
 
   try {
     let imageBuffer = null;
+    let document = null;
     if (imageBase64) {
       imageBuffer = Buffer.from(imageBase64, 'base64');
     } else if (imageUrl) {
       imageBuffer = await fetchImageBuffer(imageUrl);
+    } else if (documentBase64) {
+      document = { buffer: Buffer.from(documentBase64, 'base64'), mimeType: documentMimeType, fileName: documentFileName };
     }
-    const result = await sendGroupMessage(req.params.groupId, String(text), imageBuffer);
+    const result = await sendGroupMessage(req.params.groupId, String(text), imageBuffer, document);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
@@ -1808,18 +1837,21 @@ app.post('/admin/groups/:groupId/send', requireAdmin, adminLimiter, async (req, 
 // POST /admin/send-message - Send arbitrary text to an individual phone
 // number on demand (manual admin page or an X2Flow workflow action).
 app.post('/admin/send-message', requireAdmin, adminLimiter, async (req, res) => {
-  const { phone, text, imageBase64, imageUrl } = req.body || {};
+  const { phone, text, imageBase64, imageUrl, documentBase64, documentMimeType, documentFileName } = req.body || {};
   if (!phone) return res.status(400).json({ error: 'phone is required' });
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
 
   try {
     let imageBuffer = null;
+    let document = null;
     if (imageBase64) {
       imageBuffer = Buffer.from(imageBase64, 'base64');
     } else if (imageUrl) {
       imageBuffer = await fetchImageBuffer(imageUrl);
+    } else if (documentBase64) {
+      document = { buffer: Buffer.from(documentBase64, 'base64'), mimeType: documentMimeType, fileName: documentFileName };
     }
-    const result = await sendIndividualMessage(phone, String(text), imageBuffer);
+    const result = await sendIndividualMessage(phone, String(text), imageBuffer, document);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });

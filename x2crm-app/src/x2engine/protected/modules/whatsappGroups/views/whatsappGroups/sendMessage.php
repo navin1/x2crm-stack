@@ -31,6 +31,7 @@
                 )); ?>
 
                     <input type="hidden" id="contactId" name="contactId" value="">
+                    <input type="hidden" id="templateId" name="templateId" value="">
 
                     <div class="form-group">
                         <label>Find a Contact <span style="color: red;">*</span></label>
@@ -45,16 +46,32 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="message">Message</label>
-                        <textarea id="message" name="message" class="form-control" rows="6" required></textarea>
+                        <label for="templateSelect">Use Template (optional)</label>
+                        <select id="templateSelect" class="form-control">
+                            <option value="">-- No template --</option>
+                            <?php foreach ($templates as $t): ?>
+                                <option value="<?php echo (int) $t['id']; ?>"><?php echo CHtml::encode($t['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="text-muted template-attachment-note" id="templateAttachmentNote" style="display: none;"></p>
                     </div>
 
                     <div class="form-group">
-                        <label for="image">Image Attachment (optional)</label>
-                        <input type="file" id="image" name="image" accept="image/*">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" class="form-control" rows="6" required></textarea>
                         <p class="text-muted" style="margin-top: 4px;">
-                            Sent inline as a photo (with the message above as its caption) — shows up directly
-                            in the chat, not as a separate file download.
+                            <code>{{firstName}}</code>/<code>{{lastName}}</code>/<code>{{fullName}}</code> resolve to
+                            this Contact's own name.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="image">Image or PDF Attachment (optional)</label>
+                        <input type="file" id="image" name="image" accept="image/*,application/pdf">
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Sent inline (image as a photo, PDF as a document) with the message above as its
+                            caption — shows up directly in the chat, not as a plain file link. Overrides the
+                            template's own attachment, if any, above.
                         </p>
                     </div>
 
@@ -72,6 +89,8 @@
                     'htmlOptions' => array('enctype' => 'multipart/form-data'),
                 )); ?>
 
+                    <input type="hidden" id="groupTemplateId" name="templateId" value="">
+
                     <div class="form-group">
                         <label for="groupId">WhatsApp Group</label>
                         <select id="groupId" name="groupId" class="form-control" required>
@@ -85,16 +104,32 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="groupMessage">Message</label>
-                        <textarea id="groupMessage" name="message" class="form-control" rows="6" required></textarea>
+                        <label for="groupTemplateSelect">Use Template (optional)</label>
+                        <select id="groupTemplateSelect" class="form-control">
+                            <option value="">-- No template --</option>
+                            <?php foreach ($templates as $t): ?>
+                                <option value="<?php echo (int) $t['id']; ?>"><?php echo CHtml::encode($t['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="text-muted template-attachment-note" id="groupTemplateAttachmentNote" style="display: none;"></p>
                     </div>
 
                     <div class="form-group">
-                        <label for="groupImage">Image Attachment (optional)</label>
-                        <input type="file" id="groupImage" name="groupImage" accept="image/*">
+                        <label for="groupMessage">Message</label>
+                        <textarea id="groupMessage" name="message" class="form-control" rows="6" required></textarea>
                         <p class="text-muted" style="margin-top: 4px;">
-                            Sent inline as a photo (with the message above as its caption) — shows up directly
-                            in the chat, not as a separate file download.
+                            A group post has no single recipient, so <code>{{firstName}}</code>/<code>{{fullName}}</code>
+                            resolve to "everyone" and <code>{{lastName}}</code> is dropped.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="groupImage">Image or PDF Attachment (optional)</label>
+                        <input type="file" id="groupImage" name="groupImage" accept="image/*,application/pdf">
+                        <p class="text-muted" style="margin-top: 4px;">
+                            Sent inline (image as a photo, PDF as a document) with the message above as its
+                            caption — shows up directly in the chat, not as a plain file link. Overrides the
+                            template's own attachment, if any, above.
                         </p>
                     </div>
 
@@ -120,6 +155,8 @@
                     'htmlOptions' => array('enctype' => 'multipart/form-data'),
                 )); ?>
 
+                    <input type="hidden" id="broadcastTemplateId" name="templateId" value="">
+
                     <div class="form-group">
                         <label for="listId">Contact List</label>
                         <select id="listId" name="listId" class="form-control" style="max-width: 400px;" required>
@@ -133,6 +170,17 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="broadcastTemplateSelect">Use Template (optional)</label>
+                        <select id="broadcastTemplateSelect" class="form-control">
+                            <option value="">-- No template --</option>
+                            <?php foreach ($templates as $t): ?>
+                                <option value="<?php echo (int) $t['id']; ?>"><?php echo CHtml::encode($t['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="text-muted template-attachment-note" id="broadcastTemplateAttachmentNote" style="display: none;"></p>
+                    </div>
+
+                    <div class="form-group">
                         <label for="broadcastMessage">Message</label>
                         <textarea id="broadcastMessage" name="message" class="form-control" rows="6" required></textarea>
                         <p class="text-muted" style="margin-top: 4px;">
@@ -143,11 +191,12 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="broadcastImage">Image Attachment (optional)</label>
-                        <input type="file" id="broadcastImage" name="image" accept="image/*">
+                        <label for="broadcastImage">Image or PDF Attachment (optional)</label>
+                        <input type="file" id="broadcastImage" name="image" accept="image/*,application/pdf">
                         <p class="text-muted" style="margin-top: 4px;">
-                            Sent inline as a photo (with the message above as its caption) — shows up directly
-                            in the chat, not as a separate file download.
+                            Sent inline (image as a photo, PDF as a document) with the message above as its
+                            caption — shows up directly in the chat, not as a plain file link. Overrides the
+                            template's own attachment, if any, above.
                         </p>
                     </div>
 
@@ -163,6 +212,7 @@
 
         <div class="send-message-footer">
             <?php echo CHtml::link('Back to Groups', array('index'), array('class' => 'x2-button')); ?>
+            <?php echo CHtml::link('Manage Templates', array('templates'), array('class' => 'x2-button')); ?>
         </div>
     </div>
 </div>
@@ -243,6 +293,50 @@
                 });
         }, 300);
     });
+
+    // "Use Template" dropdowns, one per card — picking a template
+    // pre-fills that card's own textarea with the template's body and
+    // records its id, so the send action can attach the template's own
+    // image/PDF (if it has one) unless a fresh file is uploaded instead.
+    var templateJsonUrl = <?php echo CJSON::encode($this->createUrl('templateJson')); ?>;
+
+    function wireTemplatePicker(selectEl, hiddenIdEl, textareaEl, noteEl) {
+        if (!selectEl) return;
+        selectEl.addEventListener('change', function () {
+            var id = selectEl.value;
+            hiddenIdEl.value = id;
+            noteEl.style.display = 'none';
+            noteEl.textContent = '';
+            if (!id) return;
+            fetch(templateJsonUrl + '?id=' + encodeURIComponent(id))
+                .then(function (r) { return r.json(); })
+                .then(function (t) {
+                    if (!t) return;
+                    textareaEl.value = t.body;
+                    if (t.attachmentKind) {
+                        noteEl.style.display = 'block';
+                        noteEl.textContent = 'This template includes ' +
+                            (t.attachmentKind === 'image' ? 'an image' : 'a PDF') +
+                            ' attachment (' + t.attachmentFileName + ') — it will be sent unless you choose a ' +
+                            'different file above.';
+                    }
+                })
+                .catch(function () {});
+        });
+    }
+
+    wireTemplatePicker(
+        document.getElementById('templateSelect'), document.getElementById('templateId'),
+        document.getElementById('message'), document.getElementById('templateAttachmentNote')
+    );
+    wireTemplatePicker(
+        document.getElementById('groupTemplateSelect'), document.getElementById('groupTemplateId'),
+        document.getElementById('groupMessage'), document.getElementById('groupTemplateAttachmentNote')
+    );
+    wireTemplatePicker(
+        document.getElementById('broadcastTemplateSelect'), document.getElementById('broadcastTemplateId'),
+        document.getElementById('broadcastMessage'), document.getElementById('broadcastTemplateAttachmentNote')
+    );
 })();
 </script>
 

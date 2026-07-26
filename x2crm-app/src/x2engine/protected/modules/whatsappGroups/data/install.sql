@@ -44,3 +44,15 @@ CREATE TABLE IF NOT EXISTS x2_custom_lead_forms (
     fields TEXT NULL,
     lastPolledAt BIGINT NULL
 ) COLLATE = utf8_general_ci;
+/*&*/
+CREATE TABLE IF NOT EXISTS wa_message_templates (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(150) NOT NULL,
+    body TEXT NOT NULL,
+    attachmentKind VARCHAR(20) NULL,
+    attachmentData LONGBLOB NULL,
+    attachmentMimeType VARCHAR(100) NULL,
+    attachmentFileName VARCHAR(255) NULL,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

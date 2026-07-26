@@ -17,10 +17,15 @@ class WhatsAppPhoneUtil {
      * touches numbers that are EXACTLY 10 digits (the confirmed "missing
      * country code" shape here), leaves anything longer alone rather than
      * risk mis-prepending an already-correct number, and returns null
-     * (skip, don't guess) when the country isn't one this maps
-     * confidently — a wrong guessed country code could message a real,
-     * unrelated person in a different country who happens to share that
-     * local number pattern.
+     * (skip, don't guess) when the country is set to something this
+     * doesn't map confidently — a wrong guessed country code could message
+     * a real, unrelated person in a different country who happens to share
+     * that local number pattern. A BLANK country is the one exception:
+     * confirmed live against this install's real data that of the 10-digit
+     * numbers with a recognized country, ~94% are explicitly "USA" — so an
+     * empty country field defaults to USA rather than skipping, while a
+     * non-blank-but-unrecognized value (a city, zip code, typo, etc. — an
+     * actual data problem) still returns null below.
      */
     public static function toWhatsAppPhone($rawPhone, $country) {
         $digits = preg_replace('/\D/', '', (string) $rawPhone);
@@ -29,6 +34,9 @@ class WhatsAppPhoneUtil {
         }
         if (strlen($digits) !== 10) {
             return $digits;
+        }
+        if (trim((string) $country) === '') {
+            return '1' . $digits;
         }
         $callingCode = self::countryCallingCode($country);
         return $callingCode === null ? null : ($callingCode . $digits);

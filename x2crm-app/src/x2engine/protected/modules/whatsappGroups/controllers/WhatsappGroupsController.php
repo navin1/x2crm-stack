@@ -105,8 +105,9 @@ class WhatsappGroupsController extends x2base {
 
                 // A linked dynamic list takes precedence over manual selection,
                 // since its criteria is meant to be the (live) source of truth.
+                $skippedCount = 0;
                 if ($listId) {
-                    $phones = $this->getListPhones($listId);
+                    $phones = $this->getListPhones($listId, $skippedCount);
                 } else {
                     $phones = array();
                     if (!empty($selectedContacts)) {
@@ -115,6 +116,8 @@ class WhatsappGroupsController extends x2base {
                             $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
                             if ($phone) {
                                 $phones[] = $phone;
+                            } else {
+                                $skippedCount++;
                             }
                         }
                     }
@@ -129,7 +132,11 @@ class WhatsappGroupsController extends x2base {
                 $result = $this->callWaHub('POST', '/admin/groups', $payload);
 
                 if (isset($result['ok']) && $result['ok']) {
-                    Yii::app()->user->setFlash('success', 'WhatsApp group created successfully!');
+                    $successMsg = 'WhatsApp group created successfully!';
+                    if ($skippedCount > 0) {
+                        $successMsg .= " $skippedCount contact(s) skipped (no usable phone number).";
+                    }
+                    Yii::app()->user->setFlash('success', $successMsg);
                     $this->redirect(array('index'));
                 } else {
                     throw new CException('Failed to create group: ' . (isset($result['error']) ? $result['error'] : 'Unknown error'));
@@ -152,9 +159,12 @@ class WhatsappGroupsController extends x2base {
         if (!Yii::app()->params->isAdmin) {
             throw new CHttpException(403, 'Admin access required');
         }
+        $this->ensureMessageTemplatesTable();
+
         if (Yii::app()->request->isPostRequest) {
             $message = trim(Yii::app()->request->getPost('message', ''));
             $contactId = (int) Yii::app()->request->getPost('contactId', 0);
+            $templateId = (int) Yii::app()->request->getPost('templateId', 0);
 
             try {
                 if (!$contactId) {
@@ -181,19 +191,26 @@ class WhatsappGroupsController extends x2base {
                     );
                 }
 
+                // A template's {{firstName}}/{{lastName}}/{{fullName}}
+                // placeholders resolve to this specific Contact's own name —
+                // unlike the group/broadcast tools, there's exactly one
+                // known recipient here, so no generic fallback is needed.
+                $fullName = trim($contact->firstName . ' ' . $contact->lastName);
+                $message = strtr($message, array(
+                    '{{firstName}}' => $contact->firstName ?: '',
+                    '{{lastName}}' => $contact->lastName ?: '',
+                    '{{fullName}}' => $fullName !== '' ? $fullName : ($contact->firstName ?: $contact->lastName ?: ''),
+                ));
+
                 $payload = array('phone' => $resolvedPhone, 'text' => $message);
 
-                // Optional inline image attachment — read directly and
+                // Optional inline attachment — read directly and
                 // base64-encode rather than going through X2CRM's Media
                 // model/upload pipeline, since this never needs to persist
                 // as a CRM-managed file, just pass through to wa-hub once.
-                $uploadedImage = CUploadedFile::getInstanceByName('image');
-                if ($uploadedImage !== null) {
-                    if (strpos($uploadedImage->type, 'image/') !== 0) {
-                        throw new CException('Attachment must be an image.');
-                    }
-                    $payload['imageBase64'] = base64_encode(file_get_contents($uploadedImage->tempName));
-                }
+                // A freshly-uploaded file overrides a template's own
+                // attachment; see applyOutgoingAttachment().
+                $this->applyOutgoingAttachment($payload, 'image', $templateId);
 
                 $result = $this->callWaHub('POST', '/admin/send-message', $payload);
                 if (isset($result['ok']) && $result['ok']) {
@@ -202,10 +219,13 @@ class WhatsappGroupsController extends x2base {
                     // Log to the Contact's own Activity/History feed, same
                     // mechanism X2CRM uses for logged emails
                     // (Actions::associateAction, see InlineEmail::recordEmailSent).
+                    $attachmentNote = isset($payload['imageBase64'])
+                        ? "\n[with image attachment]"
+                        : (isset($payload['documentBase64']) ? "\n[with PDF attachment]" : '');
                     Actions::associateAction($contact, array(
                         'type' => 'whatsapp',
                         'subject' => 'WhatsApp Message Sent',
-                        'actionDescription' => $message . (isset($payload['imageBase64']) ? "\n[with image attachment]" : ''),
+                        'actionDescription' => $message . $attachmentNote,
                         'dueDate' => time(),
                     ));
                 } else {
@@ -224,7 +244,17 @@ class WhatsappGroupsController extends x2base {
             ->order('groupName ASC')
             ->queryAll();
 
-        $this->render('sendMessage', array('groups' => $groups, 'lists' => $this->getAccessibleContactLists()));
+        $templates = Yii::app()->db->createCommand()
+            ->select('id, name')
+            ->from('wa_message_templates')
+            ->order('name ASC')
+            ->queryAll();
+
+        $this->render('sendMessage', array(
+            'groups' => $groups,
+            'lists' => $this->getAccessibleContactLists(),
+            'templates' => $templates,
+        ));
     }
 
     /**
@@ -242,6 +272,7 @@ class WhatsappGroupsController extends x2base {
         if (Yii::app()->request->isPostRequest) {
             $groupId = trim(Yii::app()->request->getPost('groupId', ''));
             $message = trim(Yii::app()->request->getPost('message', ''));
+            $templateId = (int) Yii::app()->request->getPost('templateId', 0);
 
             try {
                 if ($groupId === '') {
@@ -251,14 +282,21 @@ class WhatsappGroupsController extends x2base {
                     throw new CException('Message cannot be blank.');
                 }
 
+                // A group post has no single recipient to personalize for,
+                // so {{firstName}}/{{fullName}} resolve to a generic,
+                // natural-sounding stand-in and {{lastName}} drops out
+                // entirely — this is what lets one shared template (also
+                // used for Individual/Broadcast, where these placeholders
+                // resolve to a real name) stay usable here too instead of
+                // showing raw unresolved placeholders in a live group chat.
+                $message = strtr($message, array(
+                    '{{firstName}}' => 'everyone',
+                    '{{fullName}}' => 'everyone',
+                    '{{lastName}}' => '',
+                ));
+
                 $payload = array('text' => $message);
-                $uploadedImage = CUploadedFile::getInstanceByName('groupImage');
-                if ($uploadedImage !== null) {
-                    if (strpos($uploadedImage->type, 'image/') !== 0) {
-                        throw new CException('Attachment must be an image.');
-                    }
-                    $payload['imageBase64'] = base64_encode(file_get_contents($uploadedImage->tempName));
-                }
+                $this->applyOutgoingAttachment($payload, 'groupImage', $templateId);
 
                 $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/send', $payload);
                 if (isset($result['ok']) && $result['ok']) {
@@ -295,6 +333,7 @@ class WhatsappGroupsController extends x2base {
 
             $listId = (int) Yii::app()->request->getPost('listId', 0);
             $message = trim(Yii::app()->request->getPost('message', ''));
+            $templateId = (int) Yii::app()->request->getPost('templateId', 0);
 
             try {
                 if (!$listId) {
@@ -319,14 +358,10 @@ class WhatsappGroupsController extends x2base {
                     throw new CException('That list has no contacts.');
                 }
 
-                $imageBase64 = null;
-                $uploadedImage = CUploadedFile::getInstanceByName('image');
-                if ($uploadedImage !== null) {
-                    if (strpos($uploadedImage->type, 'image/') !== 0) {
-                        throw new CException('Attachment must be an image.');
-                    }
-                    $imageBase64 = base64_encode(file_get_contents($uploadedImage->tempName));
-                }
+                // Resolved once (same attachment for every contact in the
+                // list), then merged into each contact's own payload below.
+                $attachmentPayload = array();
+                $this->applyOutgoingAttachment($attachmentPayload, 'image', $templateId);
 
                 $total = count($contacts);
                 $sent = 0;
@@ -356,19 +391,19 @@ class WhatsappGroupsController extends x2base {
                         '{{fullName}}' => $fullName !== '' ? $fullName : ($contact->firstName ?: $contact->lastName ?: ''),
                     ));
 
-                    $payload = array('phone' => $resolvedPhone, 'text' => $personalizedMessage);
-                    if ($imageBase64) {
-                        $payload['imageBase64'] = $imageBase64;
-                    }
+                    $payload = array_merge(array('phone' => $resolvedPhone, 'text' => $personalizedMessage), $attachmentPayload);
 
                     try {
                         $result = $this->callWaHub('POST', '/admin/send-message', $payload);
                         if (isset($result['ok']) && $result['ok']) {
                             $sent++;
+                            $attachmentNote = isset($attachmentPayload['imageBase64'])
+                                ? "\n[with image attachment]"
+                                : (isset($attachmentPayload['documentBase64']) ? "\n[with PDF attachment]" : '');
                             Actions::associateAction($contact, array(
                                 'type' => 'whatsapp',
                                 'subject' => 'WhatsApp Broadcast Sent',
-                                'actionDescription' => $personalizedMessage . ($imageBase64 ? "\n[with image attachment]" : ''),
+                                'actionDescription' => $personalizedMessage . $attachmentNote,
                                 'dueDate' => time(),
                             ));
                         } else {
@@ -401,6 +436,245 @@ class WhatsappGroupsController extends x2base {
         }
 
         $this->redirect(array('sendMessage'));
+    }
+
+    /**
+     * Message Templates: a small reusable library of canned WhatsApp
+     * messages (with an optional image/PDF attachment) that can be picked
+     * from any of the three Send Message tools instead of retyping the
+     * same wording every time. Deliberately one flat list shared across
+     * all three tools rather than per-tool templates — the
+     * {{firstName}}/{{lastName}}/{{fullName}} placeholders a template's
+     * body contains are resolved differently depending on where it's
+     * sent from (see actionSendMessage for the individual-contact
+     * substitution, actionSendGroupMessage for the group "everyone"
+     * fallback, and actionBroadcastMessage for the existing per-contact
+     * substitution), so one wording works everywhere.
+     */
+    public function actionTemplates() {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        $this->ensureMessageTemplatesTable();
+
+        if (Yii::app()->request->isPostRequest) {
+            $name = trim(Yii::app()->request->getPost('name', ''));
+            $body = trim(Yii::app()->request->getPost('body', ''));
+
+            try {
+                if ($name === '') {
+                    throw new CException('Template name is required.');
+                }
+                if ($body === '') {
+                    throw new CException('Template message cannot be blank.');
+                }
+
+                $attrs = array('name' => $name, 'body' => $body);
+                $this->applyTemplateAttachmentUpload($attrs);
+
+                Yii::app()->db->createCommand()->insert('wa_message_templates', $attrs);
+                Yii::app()->user->setFlash('success', 'Template created.');
+            } catch (Exception $e) {
+                Yii::app()->user->setFlash('error', $e->getMessage());
+            }
+            $this->redirect(array('templates'));
+        }
+
+        $templates = Yii::app()->db->createCommand()
+            ->select('id, name, body, attachmentKind, attachmentFileName, updatedAt')
+            ->from('wa_message_templates')
+            ->order('name ASC')
+            ->queryAll();
+
+        $this->render('templates', array('templates' => $templates));
+    }
+
+    /**
+     * Edit (and re-upload/remove the attachment of) an existing template.
+     */
+    public function actionEditTemplate($id) {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        $this->ensureMessageTemplatesTable();
+
+        $template = Yii::app()->db->createCommand()
+            ->select('id, name, body, attachmentKind, attachmentFileName')
+            ->from('wa_message_templates')
+            ->where('id=:id', array(':id' => $id))
+            ->queryRow();
+        if (!$template) {
+            Yii::app()->user->setFlash('error', 'Template not found.');
+            $this->redirect(array('templates'));
+        }
+
+        if (Yii::app()->request->isPostRequest) {
+            $name = trim(Yii::app()->request->getPost('name', ''));
+            $body = trim(Yii::app()->request->getPost('body', ''));
+            $removeAttachment = (bool) Yii::app()->request->getPost('removeAttachment', false);
+
+            try {
+                if ($name === '') {
+                    throw new CException('Template name is required.');
+                }
+                if ($body === '') {
+                    throw new CException('Template message cannot be blank.');
+                }
+
+                $attrs = array('name' => $name, 'body' => $body);
+                if ($removeAttachment) {
+                    $attrs['attachmentKind'] = null;
+                    $attrs['attachmentData'] = null;
+                    $attrs['attachmentMimeType'] = null;
+                    $attrs['attachmentFileName'] = null;
+                }
+                // A fresh upload (handled next) overrides the removal above
+                // if both are somehow submitted together.
+                $this->applyTemplateAttachmentUpload($attrs);
+
+                Yii::app()->db->createCommand()->update('wa_message_templates', $attrs, 'id=:id', array(':id' => $id));
+                Yii::app()->user->setFlash('success', 'Template updated.');
+                $this->redirect(array('templates'));
+            } catch (Exception $e) {
+                Yii::app()->user->setFlash('error', $e->getMessage());
+            }
+        }
+
+        $this->render('editTemplate', array('template' => $template));
+    }
+
+    /**
+     * POST-only delete, matching actionDelete()'s (group deletion) plain
+     * redirect convention rather than an AJAX/JSON response.
+     */
+    public function actionDeleteTemplate($id) {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        if (!Yii::app()->request->isPostRequest) {
+            throw new CException('Invalid request');
+        }
+        Yii::app()->db->createCommand()->delete('wa_message_templates', 'id=:id', array(':id' => $id));
+        Yii::app()->user->setFlash('success', 'Template deleted.');
+        $this->redirect(array('templates'));
+    }
+
+    /**
+     * AJAX endpoint the Send Message page's "Use Template" dropdowns call
+     * to pre-fill a form once a template is picked. Returns only the body
+     * text and attachment *metadata* (kind/filename) — never the raw
+     * attachment bytes, which stay server-side and get re-attached
+     * directly from the DB at send time (see applyOutgoingAttachment()).
+     */
+    public function actionTemplateJson($id) {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        $template = Yii::app()->db->createCommand()
+            ->select('id, name, body, attachmentKind, attachmentFileName')
+            ->from('wa_message_templates')
+            ->where('id=:id', array(':id' => $id))
+            ->queryRow();
+
+        header('Content-Type: application/json');
+        echo json_encode($template ?: null);
+        Yii::app()->end();
+    }
+
+    /**
+     * Shared by actionTemplates()/actionEditTemplate(): reads the optional
+     * "attachment" file upload into $attrs (ready for an insert()/update()
+     * against wa_message_templates), validating it's an image or a PDF.
+     * Left untouched when no file was submitted, so editing a template's
+     * text doesn't require re-uploading its existing attachment.
+     */
+    private function applyTemplateAttachmentUpload(&$attrs) {
+        $uploaded = CUploadedFile::getInstanceByName('attachment');
+        if ($uploaded === null) {
+            return;
+        }
+        $mimeType = $uploaded->type;
+        if (strpos($mimeType, 'image/') === 0) {
+            $attrs['attachmentKind'] = 'image';
+        } elseif ($mimeType === 'application/pdf') {
+            $attrs['attachmentKind'] = 'document';
+        } else {
+            throw new CException('Attachment must be an image or a PDF.');
+        }
+        $attrs['attachmentData'] = file_get_contents($uploaded->tempName);
+        $attrs['attachmentMimeType'] = $mimeType;
+        $attrs['attachmentFileName'] = $uploaded->name;
+    }
+
+    /**
+     * Shared by the three send actions: resolves the attachment to
+     * actually send and adds the right keys directly onto $payload for
+     * wa-hub (imageBase64, or documentBase64/documentMimeType/
+     * documentFileName). A freshly-uploaded file (under $uploadFieldName)
+     * always takes priority over a chosen template's own stored
+     * attachment — a template is a convenient starting point, not a lock
+     * that prevents swapping the attachment per-send.
+     */
+    private function applyOutgoingAttachment(&$payload, $uploadFieldName, $templateId) {
+        $uploaded = CUploadedFile::getInstanceByName($uploadFieldName);
+        if ($uploaded !== null) {
+            $mimeType = $uploaded->type;
+            if (strpos($mimeType, 'image/') === 0) {
+                $payload['imageBase64'] = base64_encode(file_get_contents($uploaded->tempName));
+            } elseif ($mimeType === 'application/pdf') {
+                $payload['documentBase64'] = base64_encode(file_get_contents($uploaded->tempName));
+                $payload['documentMimeType'] = $mimeType;
+                $payload['documentFileName'] = $uploaded->name;
+            } else {
+                throw new CException('Attachment must be an image or a PDF.');
+            }
+            return;
+        }
+
+        if ($templateId) {
+            $template = Yii::app()->db->createCommand()
+                ->select('attachmentKind, attachmentData, attachmentMimeType, attachmentFileName')
+                ->from('wa_message_templates')
+                ->where('id=:id', array(':id' => (int) $templateId))
+                ->queryRow();
+            if ($template && $template['attachmentKind'] === 'image') {
+                $payload['imageBase64'] = base64_encode($template['attachmentData']);
+            } elseif ($template && $template['attachmentKind'] === 'document') {
+                $payload['documentBase64'] = base64_encode($template['attachmentData']);
+                $payload['documentMimeType'] = $template['attachmentMimeType'];
+                $payload['documentFileName'] = $template['attachmentFileName'];
+            }
+        }
+    }
+
+    /**
+     * Self-heal table creation, same convention as
+     * ensureWebFormManagementColumns() — the module's install.sql only
+     * runs on a fresh install, so a table added after go-live needs this
+     * to appear on installs that predate it (every existing local/prod
+     * install in this case).
+     */
+    private function ensureMessageTemplatesTable() {
+        $db = Yii::app()->db;
+        $exists = $db->createCommand(
+            "SELECT COUNT(*) FROM information_schema.TABLES " .
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wa_message_templates'"
+        )->queryScalar();
+        if (!$exists) {
+            $db->createCommand(
+                "CREATE TABLE wa_message_templates (" .
+                "id INT PRIMARY KEY AUTO_INCREMENT, " .
+                "name VARCHAR(150) NOT NULL, " .
+                "body TEXT NOT NULL, " .
+                "attachmentKind VARCHAR(20) NULL, " .
+                "attachmentData LONGBLOB NULL, " .
+                "attachmentMimeType VARCHAR(100) NULL, " .
+                "attachmentFileName VARCHAR(255) NULL, " .
+                "createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, " .
+                "updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" .
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+            )->execute();
+        }
     }
 
     /**
@@ -476,9 +750,11 @@ class WhatsappGroupsController extends x2base {
 
     /**
      * Resolves a dynamic X2CRM list's current live criteria to the phone
-     * numbers of its matching Contacts right now.
+     * numbers of its matching Contacts right now. $skippedCount (optional,
+     * by reference) is set to how many matching contacts had no usable
+     * phone number — existing callers that don't pass it are unaffected.
      */
-    private function getListPhones($listId) {
+    private function getListPhones($listId, &$skippedCount = null) {
         // Deliberately X2List::model()->findByPk() here, not X2List::load()
         // — load() applies per-CURRENT-USER visibility scoping (via
         // Yii::app()->user->getId()/getName()) meant for a real logged-in
@@ -504,10 +780,13 @@ class WhatsappGroupsController extends x2base {
         // effectively nothing rather than the list's true full membership.
         $contacts = Contacts::model()->findAll($list->queryCriteria(false));
         $phones = array();
+        $skippedCount = 0;
         foreach ($contacts as $contact) {
             $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
             if ($phone) {
                 $phones[] = $phone;
+            } else {
+                $skippedCount++;
             }
         }
         return $phones;
@@ -910,12 +1189,15 @@ class WhatsappGroupsController extends x2base {
 
             // Get phone numbers
             $phones = array();
+            $skippedCount = 0;
             if (!empty($selectedContacts)) {
                 $contacts = Contacts::model()->findAllByPk($selectedContacts);
                 foreach ($contacts as $contact) {
                     $phone = $this->toWhatsAppPhone($contact->phone, $contact->country);
                     if ($phone) {
                         $phones[] = $phone;
+                    } else {
+                        $skippedCount++;
                     }
                 }
             }
@@ -928,7 +1210,11 @@ class WhatsappGroupsController extends x2base {
             $result = $this->callWaHub('POST', '/admin/groups/' . urlencode($groupId) . '/members', $payload);
 
             if (isset($result['ok']) && $result['ok']) {
-                Yii::app()->user->setFlash('success', 'Added ' . $result['added'] . ' members to group');
+                $successMsg = 'Added ' . $result['added'] . ' members to group';
+                if ($skippedCount > 0) {
+                    $successMsg .= ". $skippedCount selected contact(s) skipped (no usable phone number)";
+                }
+                Yii::app()->user->setFlash('success', $successMsg);
             } else {
                 throw new CException($result['error'] ?? 'Failed to add members');
             }
