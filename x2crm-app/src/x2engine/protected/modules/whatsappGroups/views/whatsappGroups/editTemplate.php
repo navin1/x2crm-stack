@@ -120,9 +120,45 @@ $attachmentUrl = !empty($template['attachmentKind'])
 
     previewTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    function escapeHtml(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Mirrors WhatsApp's own text markup so the preview actually looks
+    // like what arrives in the chat, not raw *asterisks*/_underscores_.
+    // Marker characters must hug non-space content (WhatsApp's own rule —
+    // otherwise "5 * 3" would render as bold). Monospace blocks are
+    // extracted first so nothing inside them picks up other formatting,
+    // same as real WhatsApp.
+    function waFormatToHtml(raw) {
+        var escaped = escapeHtml(raw);
+
+        var monoBlocks = [];
+        escaped = escaped.replace(/```([\s\S]+?)```/g, function (m, code) {
+            monoBlocks.push(code);
+            return ' MONO' + (monoBlocks.length - 1) + ' ';
+        });
+
+        // "> quoted text" at the start of a line.
+        escaped = escaped.replace(/^&gt; ?(.*)$/gm, '<span class="wa-quote">$1</span>');
+
+        escaped = escaped.replace(/\*(\S(?:[^*\n]*\S)?)\*/g, '<strong>$1</strong>');
+        escaped = escaped.replace(/_(\S(?:[^_\n]*\S)?)_/g, '<em>$1</em>');
+        escaped = escaped.replace(/~(\S(?:[^~\n]*\S)?)~/g, '<del>$1</del>');
+
+        // WhatsApp auto-links bare URLs.
+        escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
+        escaped = escaped.replace(/ MONO(\d+) /g, function (m, i) {
+            return '<code>' + monoBlocks[+i] + '</code>';
+        });
+
+        return escaped;
+    }
+
     function renderText() {
         var body = bodyInput.value.trim();
-        previewText.textContent = body === '' ? 'Type a message to see a preview…' : body;
+        previewText.innerHTML = body === '' ? 'Type a message to see a preview…' : waFormatToHtml(body);
         previewName.textContent = nameInput.value.trim() || 'Message Preview';
     }
 
@@ -268,6 +304,18 @@ $attachmentUrl = !empty($template['attachmentKind'])
         word-break: break-word;
         font-size: 14.5px;
         color: #111;
+    }
+    .wa-preview-text strong { font-weight: 700; }
+    .wa-preview-text em { font-style: italic; }
+    .wa-preview-text del { text-decoration: line-through; }
+    .wa-preview-text code { font-family: "Courier New", Courier, monospace; }
+    .wa-preview-text a { color: #039be5; text-decoration: none; }
+    .wa-preview-text .wa-quote {
+        display: block;
+        border-left: 3px solid rgba(0, 0, 0, 0.25);
+        padding-left: 8px;
+        color: rgba(0, 0, 0, 0.6);
+        margin: 2px 0;
     }
     .wa-preview-meta {
         text-align: right;
