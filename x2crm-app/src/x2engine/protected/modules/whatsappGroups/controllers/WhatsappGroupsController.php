@@ -739,6 +739,7 @@ class WhatsappGroupsController extends x2base {
         if (Yii::app()->user->isGuest) {
             throw new CHttpException(403, 'Login required');
         }
+        $this->ensureMessageAttachmentsTable();
         $attachment = Yii::app()->db->createCommand()
             ->select('data, mimeType, fileName')
             ->from('wa_message_attachments')

@@ -301,11 +301,22 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
     // outside the core schema. Images use the "attachment-img" class so
     // ActionHistory.js's existing click-to-enlarge behavior picks them up
     // automatically, same as every other inline image in this feed.
-    $whatsappAttachment = Yii::app()->db->createCommand()
-        ->select('kind, fileName')
-        ->from('wa_message_attachments')
-        ->where('actionId=:id', array(':id' => $data->id))
-        ->queryRow();
+    // The table only gets self-healed into existence the first time a
+    // WhatsApp message with an attachment is actually sent (see
+    // saveMessageAttachment()) — on an install where that's never
+    // happened yet, the table doesn't exist at all, which would otherwise
+    // 500 this entire page for every WhatsApp history entry, attachment
+    // or not. Caught here rather than crashing: no table simply means no
+    // attachment to show, same as a normal empty result.
+    try {
+        $whatsappAttachment = Yii::app()->db->createCommand()
+            ->select('kind, fileName')
+            ->from('wa_message_attachments')
+            ->where('actionId=:id', array(':id' => $data->id))
+            ->queryRow();
+    } catch (Exception $e) {
+        $whatsappAttachment = false;
+    }
     if ($whatsappAttachment) {
         $whatsappAttachmentUrl = Yii::app()->createUrl(
             '/whatsappGroups/whatsappGroups/messageAttachment', array('actionId' => $data->id));
