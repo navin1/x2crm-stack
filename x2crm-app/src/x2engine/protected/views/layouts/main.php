@@ -332,17 +332,14 @@ foreach($modules as $moduleItem){
                             'url' => array($baseModuleUrl.$moduleAction['url']),
                             'active' => false));
                     }                         
-                    // WhatsApp Groups lives in its own module, not under
+                    // WhatsApp now has its own top-level tab (see the
+                    // "whatsappGroups" branch below) — no longer duplicated
+                    // here.
+                    // MailerLite Sync lives in its own module, not under
                     // contacts/, so it can't go through the loop above
-                    // (which always prefixes urls with "contacts/").
-                    array_push($moduleActions, array(
-                        'label' => Yii::t('contacts', 'WhatsApp Groups'),
-                        'itemOptions' => array ('style' => 'display: list-item;','class' => 'top-bar-module-action-link'),
-                        'url' => array('/whatsappGroups/whatsappGroups/index'),
-                        'active' => false));
-                    // Same reasoning as WhatsApp Groups above — points at the
-                    // sync-tools page (open to any logged-in user), not the
-                    // admin-only API key page (mailerlite/apiSettings).
+                    // (which always prefixes urls with "contacts/") — points
+                    // at the sync-tools page (open to any logged-in user),
+                    // not the admin-only API key page (mailerlite/apiSettings).
                     array_push($moduleActions, array(
                         'label' => Yii::t('contacts', 'MailerLite Sync'),
                         'itemOptions' => array ('style' => 'display: list-item;','class' => 'top-bar-module-action-link'),
@@ -916,9 +913,38 @@ foreach($modules as $moduleItem){
                             'itemOptions' => array ('style' => 'display: list-item;','class' => 'top-bar-module-action-link'),
                             'url' => array($baseModuleUrl.$moduleAction['url']),
                             'active' => false));
-                    }       
+                    }
+                } else if ($name === 'whatsappGroups') {
+                    $moduleMenuItems = array(
+                    array(
+                        'name' => 'index',
+                        'label' => 'Groups',
+                        'url' => 'index'
+                    ),
+                    array(
+                        'name' => 'sendMessage',
+                        'label' => 'Messages',
+                        'url' => 'sendMessage'
+                    ),
+                    array(
+                        'name' => 'templates',
+                        'label' => 'Templates',
+                        'url' => 'templates'
+                    ),
+                    array(
+                        'name' => 'editNotifyTemplate',
+                        'label' => 'Lead Message',
+                        'url' => 'editNotifyTemplate'
+                    ));
+                    foreach($moduleMenuItems as $moduleAction){
+                        array_push($moduleActions,array(
+                            'label' => Yii::t('app', $moduleAction['label']),
+                            'itemOptions' => array ('style' => 'display: list-item;','class' => 'top-bar-module-action-link'),
+                            'url' => array($baseModuleUrl.$moduleAction['url']),
+                            'active' => false));
+                    }
                 }
-                $active = (strtolower($module) == strtolower($name) && 
+                $active = (strtolower($module) == strtolower($name) &&
                     (!isset($_GET['static']) || $_GET['static'] != 'true')) ? true : null;
                  
                 if ($module === 'reports' && 
