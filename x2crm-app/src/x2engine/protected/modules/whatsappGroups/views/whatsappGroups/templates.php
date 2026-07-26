@@ -52,6 +52,7 @@
                         <div class="form-group">
                             <label for="attachment">Image or PDF Attachment (optional)</label>
                             <input type="file" id="attachment" name="attachment" accept="image/*,application/pdf">
+                            <a href="#" id="attachmentClear" class="wa-file-clear" style="display: none;">&times; Remove</a>
                             <p class="text-muted" style="margin-top: 4px;">
                                 Sent inline (image as a photo, PDF as a document) — directly visible in the chat,
                                 not a plain file link.
@@ -227,6 +228,23 @@
     bodyInput.addEventListener('input', renderText);
     attachmentInput.addEventListener('change', renderAttachment);
     renderText();
+
+    // "x Remove" — plain <input type="file"> has no visible way to
+    // deselect a chosen file short of re-opening the picker and hitting
+    // Cancel. Dispatching "change" afterward lets renderAttachment()
+    // above clear the preview the same way it would for any other change.
+    var attachmentClear = document.getElementById('attachmentClear');
+    if (attachmentClear) {
+        attachmentInput.addEventListener('change', function () {
+            attachmentClear.style.display = (attachmentInput.files && attachmentInput.files.length) ? 'inline' : 'none';
+        });
+        attachmentClear.addEventListener('click', function (e) {
+            e.preventDefault();
+            attachmentInput.value = '';
+            attachmentClear.style.display = 'none';
+            attachmentInput.dispatchEvent(new Event('change'));
+        });
+    }
 })();
 </script>
 
@@ -243,6 +261,8 @@
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .alert-info { color: #0c5460; background-color: #d1ecf1; border-color: #bee5eb; }
     .text-muted { color: #6c757d; }
+    .wa-file-clear { margin-left: 8px; color: #c0392b; font-size: 13px; text-decoration: none; }
+    .wa-file-clear:hover { text-decoration: underline; }
     .label { display: inline-block; padding: 4px 8px; border-radius: 3px; color: #fff; font-size: 13px; }
     .label-success { background-color: #28a745; }
     .label-warning { background-color: #e0a800; }

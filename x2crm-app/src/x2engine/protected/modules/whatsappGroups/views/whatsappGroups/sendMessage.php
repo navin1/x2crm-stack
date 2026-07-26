@@ -68,6 +68,7 @@
                     <div class="form-group">
                         <label for="image">Image or PDF Attachment (optional)</label>
                         <input type="file" id="image" name="image" accept="image/*,application/pdf">
+                        <a href="#" id="imageClear" class="wa-file-clear" style="display: none;">&times; Remove</a>
                         <p class="text-muted" style="margin-top: 4px;">
                             Sent inline (image as a photo, PDF as a document) with the message above as its
                             caption — shows up directly in the chat, not as a plain file link. Overrides the
@@ -126,6 +127,7 @@
                     <div class="form-group">
                         <label for="groupImage">Image or PDF Attachment (optional)</label>
                         <input type="file" id="groupImage" name="groupImage" accept="image/*,application/pdf">
+                        <a href="#" id="groupImageClear" class="wa-file-clear" style="display: none;">&times; Remove</a>
                         <p class="text-muted" style="margin-top: 4px;">
                             Sent inline (image as a photo, PDF as a document) with the message above as its
                             caption — shows up directly in the chat, not as a plain file link. Overrides the
@@ -193,6 +195,7 @@
                     <div class="form-group">
                         <label for="broadcastImage">Image or PDF Attachment (optional)</label>
                         <input type="file" id="broadcastImage" name="image" accept="image/*,application/pdf">
+                        <a href="#" id="broadcastImageClear" class="wa-file-clear" style="display: none;">&times; Remove</a>
                         <p class="text-muted" style="margin-top: 4px;">
                             Sent inline (image as a photo, PDF as a document) with the message above as its
                             caption — shows up directly in the chat, not as a plain file link. Overrides the
@@ -337,6 +340,28 @@
         document.getElementById('broadcastTemplateSelect'), document.getElementById('broadcastTemplateId'),
         document.getElementById('broadcastMessage'), document.getElementById('broadcastTemplateAttachmentNote')
     );
+
+    // "x Remove" next to each file input — plain <input type="file"> has
+    // no visible way to deselect a chosen file short of re-opening the
+    // picker and hitting Cancel, which isn't obvious. Shows up once a
+    // file is chosen, clears the input and hides itself when clicked.
+    function wireFileClear(inputId, clearId) {
+        var input = document.getElementById(inputId);
+        var clear = document.getElementById(clearId);
+        if (!input || !clear) return;
+        input.addEventListener('change', function () {
+            clear.style.display = (input.files && input.files.length) ? 'inline' : 'none';
+        });
+        clear.addEventListener('click', function (e) {
+            e.preventDefault();
+            input.value = '';
+            clear.style.display = 'none';
+            input.dispatchEvent(new Event('change'));
+        });
+    }
+    wireFileClear('image', 'imageClear');
+    wireFileClear('groupImage', 'groupImageClear');
+    wireFileClear('broadcastImage', 'broadcastImageClear');
 })();
 </script>
 
@@ -368,6 +393,8 @@
     .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .text-muted { color: #6c757d; }
+    .wa-file-clear { margin-left: 8px; color: #c0392b; font-size: 13px; text-decoration: none; }
+    .wa-file-clear:hover { text-decoration: underline; }
 
     /* Three equal-width cards on wide screens, each a flex column so its
        Send button consistently sinks to the bottom regardless of how much

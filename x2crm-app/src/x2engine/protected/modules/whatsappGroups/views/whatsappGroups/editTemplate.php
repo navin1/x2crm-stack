@@ -61,6 +61,7 @@ $attachmentUrl = !empty($template['attachmentKind'])
                         <div class="form-group">
                             <label for="attachment">Replace Attachment (optional)</label>
                             <input type="file" id="attachment" name="attachment" accept="image/*,application/pdf">
+                            <a href="#" id="attachmentClear" class="wa-file-clear" style="display: none;">&times; Remove</a>
                             <p class="text-muted" style="margin-top: 4px;">
                                 Uploading a new file here replaces the current attachment regardless of the
                                 "Remove" checkbox above.
@@ -213,6 +214,22 @@ $attachmentUrl = !empty($template['attachmentKind'])
     }
     renderText();
     renderAttachment();
+
+    // "x Remove" for a freshly-chosen replacement file — clears back to
+    // whatever renderAttachment() would otherwise show (the saved
+    // attachment, or nothing if "Remove this attachment" is also checked).
+    var attachmentClear = document.getElementById('attachmentClear');
+    if (attachmentClear) {
+        attachmentInput.addEventListener('change', function () {
+            attachmentClear.style.display = (attachmentInput.files && attachmentInput.files.length) ? 'inline' : 'none';
+        });
+        attachmentClear.addEventListener('click', function (e) {
+            e.preventDefault();
+            attachmentInput.value = '';
+            attachmentClear.style.display = 'none';
+            attachmentInput.dispatchEvent(new Event('change'));
+        });
+    }
 })();
 </script>
 
@@ -228,6 +245,8 @@ $attachmentUrl = !empty($template['attachmentKind'])
     .alert { padding: 12px 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
     .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
     .text-muted { color: #6c757d; }
+    .wa-file-clear { margin-left: 8px; color: #c0392b; font-size: 13px; text-decoration: none; }
+    .wa-file-clear:hover { text-decoration: underline; }
     .label { display: inline-block; padding: 4px 8px; border-radius: 3px; color: #fff; font-size: 13px; }
     .label-success { background-color: #28a745; }
     .label-warning { background-color: #e0a800; }
