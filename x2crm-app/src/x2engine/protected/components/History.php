@@ -78,6 +78,7 @@ class History extends X2Widget {
             'time' => ' AND type="time"',
             'webactivity' => 'AND type IN ("weblead","webactivity")',
             'workflow' => ' AND type="workflow"',
+            'whatsapp' => ' AND type="whatsapp"',
         );
         $multiAssociationIds = array($associationId);
         if ($relationships) {
@@ -202,6 +203,7 @@ class History extends X2Widget {
                 'workflow' => Yii::t('app', '{process}', array(
                     '{process}' => Modules::displayName(true, 'Workflow'),
                 )),
+                'whatsapp' => Yii::t('app', 'WhatsApp'),
             );
             $profile = Yii::app()->params->profile;
             if (isset($profile)) { // Load their saved preferences from the profile

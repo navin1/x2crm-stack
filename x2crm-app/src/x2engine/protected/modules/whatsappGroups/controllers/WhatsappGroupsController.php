@@ -227,6 +227,7 @@ class WhatsappGroupsController extends x2base {
                         'subject' => 'WhatsApp Message Sent',
                         'actionDescription' => $message . $attachmentNote,
                         'dueDate' => time(),
+                        'completedBy' => Yii::app()->user->getName(),
                     ));
                 } else {
                     throw new CException(isset($result['error']) ? $result['error'] : 'Failed to send message');
@@ -405,6 +406,7 @@ class WhatsappGroupsController extends x2base {
                                 'subject' => 'WhatsApp Broadcast Sent',
                                 'actionDescription' => $personalizedMessage . $attachmentNote,
                                 'dueDate' => time(),
+                                'completedBy' => Yii::app()->user->getName(),
                             ));
                         } else {
                             $failed++;

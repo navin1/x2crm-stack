@@ -93,6 +93,9 @@ if(empty($data->type)){
 <?php //echo CHtml::link('[x]',array('deleteNote','id'=>$data->id)); //,array('class'=>'x2-button')  ?>
     </div>-->
     <div class="icon <?php echo $iconType; ?>">
+    <?php if ($iconType === 'whatsapp'): ?>
+        <i class="fa fa-comments" style="color: #25D366; font-size: 30px; line-height: 55px;"></i>
+    <?php endif; ?>
     <div class="stacked-icon"></div>
     </div>
 <div class='history-content-container'>
@@ -152,6 +155,9 @@ if(empty($data->type) || $data->type == 'weblead'){
         in_array($data->type, array('emailOpened', 'emailOpened_quote', 'email_opened_invoice'))) {
 
         $label = 'Email Opened:';
+    } elseif($data->type == 'whatsapp') {
+        $label = (strpos((string) $data->subject, 'Broadcast') !== false)
+            ? 'WhatsApp Broadcast:' : 'WhatsApp Message:';
     }
 
     if(isset($label)) echo Yii::t('actions', $label).' ';
@@ -272,6 +278,11 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
     echo $data->actionDescription;
 }elseif($data->type == 'quotes'){
     $data->renderInlineViewLink ();
+}elseif($data->type == 'whatsapp'){
+    // The header already shows "WhatsApp Message:"/"WhatsApp Broadcast:",
+    // so the subject ("WhatsApp Message Sent"/"WhatsApp Broadcast Sent")
+    // would just repeat that — skip straight to the actual message text.
+    echo Yii::app()->controller->convertUrls($data->actionDescription);
 } else {
     if (isset($data->subject) && $data->subject !== '' && !ctype_space($data->subject)) {
         echo '<b>'.Yii::t('actions', 'Subject: ').'</b>'. Yii::app()->controller->convertUrls($data->subject);
@@ -310,6 +321,8 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
             echo Yii::t('media', 'Uploaded by {name}', array('{name}' => User::getUserLinks($data->completedBy))).$relString;
         }else if(in_array($data->type, array('email', 'emailFrom')) && $data->completedBy != 'Email'){
             echo Yii::t('media', ($data->type == 'email' ? 'Sent by {name}' : 'Sent to {name}'), array('{name}' => User::getUserLinks($data->completedBy))).$relString;
+        }else if($data->type == 'whatsapp' && !empty($data->completedBy)){
+            echo Yii::t('actions', 'Sent by {name}', array('{name}' => User::getUserLinks($data->completedBy))).$relString;
         }
         if (Yii::app()->settings->googleIntegration && isset($data->location)) {
             echo '<div class="right">';
