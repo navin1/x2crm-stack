@@ -282,7 +282,17 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
     // The header already shows "WhatsApp Message:"/"WhatsApp Broadcast:",
     // so the subject ("WhatsApp Message Sent"/"WhatsApp Broadcast Sent")
     // would just repeat that — skip straight to the actual message text.
-    echo Yii::app()->controller->convertUrls($data->actionDescription);
+    // A trailing "[from:<number>]" marker (appended by the sender, see
+    // WhatsappGroupsController) records which of this install's linked
+    // WhatsApp numbers actually sent it — pulled out here so it can be
+    // shown as footer metadata below instead of as part of the message.
+    $whatsappBody = $data->actionDescription;
+    $whatsappFromPhone = null;
+    if (preg_match('/\n\[from:([^\]]+)\]$/', $whatsappBody, $whatsappFromMatch)) {
+        $whatsappFromPhone = $whatsappFromMatch[1];
+        $whatsappBody = substr($whatsappBody, 0, -strlen($whatsappFromMatch[0]));
+    }
+    echo Yii::app()->controller->convertUrls($whatsappBody);
 } else {
     if (isset($data->subject) && $data->subject !== '' && !ctype_space($data->subject)) {
         echo '<b>'.Yii::t('actions', 'Subject: ').'</b>'. Yii::app()->controller->convertUrls($data->subject);
@@ -321,8 +331,15 @@ if($type == 'attachment' && $data->completedBy != 'Email') {
             echo Yii::t('media', 'Uploaded by {name}', array('{name}' => User::getUserLinks($data->completedBy))).$relString;
         }else if(in_array($data->type, array('email', 'emailFrom')) && $data->completedBy != 'Email'){
             echo Yii::t('media', ($data->type == 'email' ? 'Sent by {name}' : 'Sent to {name}'), array('{name}' => User::getUserLinks($data->completedBy))).$relString;
-        }else if($data->type == 'whatsapp' && !empty($data->completedBy)){
-            echo Yii::t('actions', 'Sent by {name}', array('{name}' => User::getUserLinks($data->completedBy))).$relString;
+        }else if($data->type == 'whatsapp' && (!empty($data->completedBy) || !empty($whatsappFromPhone))){
+            $whatsappFooterParts = array();
+            if (!empty($data->completedBy)) {
+                $whatsappFooterParts[] = Yii::t('actions', 'Sent by {name}', array('{name}' => User::getUserLinks($data->completedBy)));
+            }
+            if (!empty($whatsappFromPhone)) {
+                $whatsappFooterParts[] = Yii::t('actions', 'from +{phone}', array('{phone}' => CHtml::encode($whatsappFromPhone)));
+            }
+            echo implode(' ', $whatsappFooterParts).$relString;
         }
         if (Yii::app()->settings->googleIntegration && isset($data->location)) {
             echo '<div class="right">';

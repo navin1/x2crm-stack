@@ -222,10 +222,16 @@ class WhatsappGroupsController extends x2base {
                     $attachmentNote = isset($payload['imageBase64'])
                         ? "\n[with image attachment]"
                         : (isset($payload['documentBase64']) ? "\n[with PDF attachment]" : '');
+                    // Appends a "[from:<number>]" marker _historyView.php
+                    // parses back out to show which of this install's
+                    // linked WhatsApp numbers actually sent it, rather
+                    // than a number that could go stale if the connected
+                    // account is ever swapped later.
+                    $fromPhoneNote = !empty($result['fromPhone']) ? "\n[from:" . $result['fromPhone'] . "]" : '';
                     Actions::associateAction($contact, array(
                         'type' => 'whatsapp',
                         'subject' => 'WhatsApp Message Sent',
-                        'actionDescription' => $message . $attachmentNote,
+                        'actionDescription' => $message . $attachmentNote . $fromPhoneNote,
                         'dueDate' => time(),
                         'completedBy' => Yii::app()->user->getName(),
                     ));
@@ -401,10 +407,11 @@ class WhatsappGroupsController extends x2base {
                             $attachmentNote = isset($attachmentPayload['imageBase64'])
                                 ? "\n[with image attachment]"
                                 : (isset($attachmentPayload['documentBase64']) ? "\n[with PDF attachment]" : '');
+                            $fromPhoneNote = !empty($result['fromPhone']) ? "\n[from:" . $result['fromPhone'] . "]" : '';
                             Actions::associateAction($contact, array(
                                 'type' => 'whatsapp',
                                 'subject' => 'WhatsApp Broadcast Sent',
-                                'actionDescription' => $personalizedMessage . $attachmentNote,
+                                'actionDescription' => $personalizedMessage . $attachmentNote . $fromPhoneNote,
                                 'dueDate' => time(),
                                 'completedBy' => Yii::app()->user->getName(),
                             ));

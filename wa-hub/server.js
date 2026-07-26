@@ -920,7 +920,10 @@ async function sendIndividualMessage(phone, text, imageBuffer, document) {
     }
     await sendWhatsAppMessage(cleaned, payload);
     await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned, hasImage: !!imageBuffer, hasDocument: !!document }, success: true });
-    return { success: true };
+    // Included so callers (X2CRM) can record which of this install's
+    // linked WhatsApp numbers actually sent it — useful history/audit
+    // context if the connected number is ever swapped later.
+    return { success: true, fromPhone: getOwnPhone() };
   } catch (err) {
     console.error('wa-hub: failed to send individual message:', err.message || err);
     await logAdminAction({ action: 'send_individual_message', params: { phone: cleaned }, success: false, error: err.message });
@@ -963,7 +966,7 @@ async function sendGroupMessage(groupId, text, imageBuffer, document) {
       await sock.sendMessage(groupId, { text });
     }
     await logAdminAction({ action: 'send_group_message', params: { groupId, hasImage: !!imageBuffer, hasDocument: !!document }, success: true });
-    return { success: true };
+    return { success: true, fromPhone: getOwnPhone() };
   } catch (err) {
     console.error('wa-hub: failed to send group message:', err.message || err);
     await logAdminAction({ action: 'send_group_message', params: { groupId }, success: false, error: err.message });

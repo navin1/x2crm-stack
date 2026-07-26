@@ -79,7 +79,7 @@ class X2FlowSendWhatsAppMessage extends X2FlowAction {
         }
 
         try {
-            $this->callWaHub('POST', '/admin/send-message', $payload);
+            $result = $this->callWaHub('POST', '/admin/send-message', $payload);
         } catch (Exception $e) {
             return array(false, $e->getMessage());
         }
@@ -90,10 +90,11 @@ class X2FlowSendWhatsAppMessage extends X2FlowAction {
         // actually bound to a record (e.g. a Contact), not for a
         // hardcoded/unrelated "to" number.
         if (isset($params['model']) && $params['model'] instanceof X2Model && !$params['model']->isNewRecord) {
+            $fromPhoneNote = !empty($result['fromPhone']) ? "\n[from:" . $result['fromPhone'] . "]" : '';
             Actions::associateAction($params['model'], array(
                 'type' => 'whatsapp',
                 'subject' => 'WhatsApp Message Sent',
-                'actionDescription' => $message . (!empty($imageUrl) ? "\n[with image attachment]" : ''),
+                'actionDescription' => $message . (!empty($imageUrl) ? "\n[with image attachment]" : '') . $fromPhoneNote,
                 'dueDate' => time(),
             ));
         }
