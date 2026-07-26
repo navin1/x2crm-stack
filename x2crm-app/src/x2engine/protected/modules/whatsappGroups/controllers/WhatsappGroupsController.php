@@ -582,6 +582,31 @@ class WhatsappGroupsController extends x2base {
     }
 
     /**
+     * Streams a template's raw attachment bytes (image or PDF) — used by
+     * the edit page's live preview to show the currently-saved attachment
+     * as an actual <img>/link before anything is re-uploaded. Distinct
+     * from actionTemplateJson(), which deliberately never exposes the raw
+     * bytes to the browser as part of its metadata response.
+     */
+    public function actionTemplateAttachment($id) {
+        if (!Yii::app()->params->isAdmin) {
+            throw new CHttpException(403, 'Admin access required');
+        }
+        $template = Yii::app()->db->createCommand()
+            ->select('attachmentData, attachmentMimeType, attachmentFileName')
+            ->from('wa_message_templates')
+            ->where('id=:id', array(':id' => $id))
+            ->queryRow();
+        if (!$template || empty($template['attachmentData'])) {
+            throw new CHttpException(404, 'No attachment.');
+        }
+        header('Content-Type: ' . $template['attachmentMimeType']);
+        header('Content-Disposition: inline; filename="' . addslashes($template['attachmentFileName']) . '"');
+        echo $template['attachmentData'];
+        Yii::app()->end();
+    }
+
+    /**
      * Shared by actionTemplates()/actionEditTemplate(): reads the optional
      * "attachment" file upload into $attrs (ready for an insert()/update()
      * against wa_message_templates), validating it's an image or a PDF.
